@@ -1,0 +1,40 @@
+================================
+Waktu: 2025-07-24 11:49:21
+Signature Diterima: 
+Body JSON Diterima: {"reference":"DEV-T23738262092PXTL1","merchant_ref":"INV-1-1753357708","payment_method":"QRIS by ShopeePay","payment_method_code":"QRIS","total_amount":202150,"fee_merchant":0,"fee_customer":2150,"total_fee":2150,"amount_received":200000,"is_closed_payment":1,"status":"PAID","paid_at":1753357761,"note":null}
+Signature Dihitung: 80a1524886f4607a15077e8c94d724826b378b583e69a62a66627f391831ee54
+Signature Cocok: TIDAK
+================================
+
+================================
+Waktu: 2025-07-24 11:50:35
+Signature Diterima: 
+Body JSON Diterima: {"reference":"DEV-T23738262093CODCY","merchant_ref":"INV-1-1753357807","payment_method":"QRIS by ShopeePay","payment_method_code":"QRIS","total_amount":202150,"fee_merchant":0,"fee_customer":2150,"total_fee":2150,"amount_received":200000,"is_closed_payment":1,"status":"PAID","paid_at":1753357835,"note":null}
+Signature Dihitung: d7ef2476c5ca6e5bd7111d2c0c6342035aaf0f1e587070a16aab37c8c17092e7
+Signature Cocok: TIDAK
+================================
+
+================================
+Waktu: 2025-07-24 11:52:28
+Signature Diterima: d4cf823de0e0b6e9aa502d15ae5d0ff927acc39d6c5310fa1b440307e26680f0
+Body JSON Diterima: {"reference":"DEV-T23738262095FHMFT","merchant_ref":"INV-1-1753357930","payment_method":"QRIS by ShopeePay","payment_method_code":"QRIS","total_amount":202150,"fee_merchant":0,"fee_customer":2150,"total_fee":2150,"amount_received":200000,"is_closed_payment":1,"status":"PAID","paid_at":1753357948,"note":null}
+Signature Dihitung: d4cf823de0e0b6e9aa502d15ae5d0ff927acc39d6c5310fa1b440307e26680f0
+Signature Cocok: YA
+================================
+
+================================
+Waktu: 2025-07-24 12:05:34
+Signature Diterima: 2d256e3b88c2bc9cec98a04bc045aefada2d1a0430d0f3c19c6922a3c3b93a29
+Body JSON Diterima: {"reference":"DEV-T23738262109JQCZW","merchant_ref":"INV-2-1753358715","payment_method":"QRIS by ShopeePay","payment_method_code":"QRIS","total_amount":151800,"fee_merchant":0,"fee_customer":1800,"total_fee":1800,"amount_received":150000,"is_closed_payment":1,"status":"PAID","paid_at":1753358734,"note":null}
+Signature Dihitung: 2d256e3b88c2bc9cec98a04bc045aefada2d1a0430d0f3c19c6922a3c3b93a29
+Signature Cocok: YA
+================================
+
+================================
+Waktu: 2025-07-24 19:15:01
+Signature Diterima: 7e012fe30d2a50932fd100222d71e7da5f8eabd2e5d5ea4d1e61c72568796401
+Body JSON Diterima: {"reference":"DEV-T23738262119BJ6RA","merchant_ref":"INV-3-1753359288","payment_method":"QRIS by ShopeePay","payment_method_code":"QRIS","total_amount":302850,"fee_merchant":0,"fee_customer":2850,"total_fee":2850,"amount_received":300000,"is_closed_payment":1,"status":"PAID","paid_at":1753359300,"note":null}
+Signature Dihitung: 7e012fe30d2a50932fd100222d71e7da5f8eabd2e5d5ea4d1e61c72568796401
+Signature Cocok: YA
+================================
+
