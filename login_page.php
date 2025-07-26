@@ -1,72 +1,125 @@
+<?php
+/**
+ * Halaman Login Pengguna.
+ *
+ * Halaman ini menangani proses otentikasi pengguna.
+ * Logikanya adalah sebagai berikut:
+ * 1. Memuat konfigurasi database.
+ * 2. Jika pengguna sudah login, alihkan ke halaman utama (index.php).
+ * 3. Menampilkan pesan sukses jika baru saja menyelesaikan proses setup.
+ * 4. Saat form disubmit, verifikasi username dan password dengan data di tabel 'users'.
+ * 5. Jika berhasil, simpan informasi pengguna ke dalam session dan alihkan ke index.php.
+ *
+ * @package PPPOE_MANAGER
+ */
+
+// Muat file konfigurasi untuk mendapatkan koneksi $pdo.
+require_once 'config.php';
+
+// Jika pengguna sudah login (ada user_id di session), jangan tampilkan halaman login.
+// Langsung alihkan ke halaman utama.
+if (isset($_SESSION['user_id'])) {
+    header('Location: index.php');
+    exit();
+}
+
+// Inisialisasi variabel untuk pesan.
+$error_message = '';
+$success_message = '';
+
+// Cek apakah ada pesan sukses dari halaman setup.
+if (isset($_SESSION['setup_success'])) {
+    $success_message = $_SESSION['setup_success'];
+    // Hapus pesan dari session agar tidak muncul lagi saat halaman di-refresh.
+    unset($_SESSION['setup_success']);
+}
+
+// Proses form jika metode request adalah POST.
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $username = $_POST['username'];
+    $password = $_POST['password'];
+
+    if (empty($username) || empty($password)) {
+        $error_message = 'Username dan password wajib diisi.';
+    } else {
+        try {
+            // Cari pengguna berdasarkan username.
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ?");
+            $stmt->execute([$username]);
+            $user = $stmt->fetch();
+
+            // Verifikasi pengguna dan password.
+            // password_verify() akan membandingkan password yang diinput dengan hash di database.
+            if ($user && password_verify($password, $user['password'])) {
+                // Jika berhasil, simpan data penting ke session.
+                $_SESSION['user_id'] = $user['id'];
+                $_SESSION['username'] = $user['username'];
+                $_SESSION['nama_lengkap'] = $user['nama_lengkap'];
+                $_SESSION['level'] = $user['level'];
+
+                // Alihkan ke halaman utama.
+                header('Location: index.php');
+                exit();
+            } else {
+                // Jika username atau password salah.
+                $error_message = 'Username atau password salah.';
+            }
+        } catch (PDOException $e) {
+            // Jika terjadi error pada database.
+            $error_message = 'Terjadi masalah pada server. Silakan coba lagi nanti.';
+            // Untuk debugging, Anda bisa menampilkan error aslinya:
+            // $error_message = 'Database Error: ' . $e->getMessage();
+        }
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - PPPoE Panel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>Login - PPPoE Manager</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { 
-            background-color: #16191c; 
-            color: #d1d2d3; 
-            display: flex; /* Use flexbox for centering */
-            justify-content: center; /* Center horizontally */
-            align-items: center; /* Center vertically */
-            min-height: 100vh; /* Full viewport height */
-            margin: 0; /* Remove default body margin */
+        body {
+            background-color: #f8f9fa;
         }
-        .card { 
-            background-color: #212529; 
-            border: 1px solid #2a2e34; 
-            width: 100%; /* Ensure card takes full width of its column */
-            max-width: 400px; /* Limit max width for better appearance on large screens */
-        }
-        .form-control { 
-            background-color: #2c3034; 
-            border-color: #3e444a; 
-            color: #fff; 
-        }
-        .form-control:focus { 
-            background-color: #2c3034; 
-            border-color: #4e73df; 
-            color: #fff; 
-            box-shadow: none; 
-        }
-        /* Responsive adjustments for smaller screens */
-        @media (max-width: 576px) {
-            body { font-size: 0.9rem; }
-            .h3 { font-size: 1.5rem; }
-            .card { margin: 15px; /* Add some margin on very small screens */ }
+        .login-container {
+            max-width: 400px;
+            margin: 5rem auto;
+            padding: 2rem;
+            background-color: #fff;
+            border-radius: 0.5rem;
+            box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1);
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="row justify-content-center align-items-center">
-            <div class="col-md-6 col-lg-4">
-                <div class="card shadow-lg">
-                    <div class="card-body p-4">
-                        <h3 class="text-center mb-4">Login Panel</h3>
-                        <?php if (isset($login_error)): ?>
-                            <div class="alert alert-danger"><?= $login_error ?></div>
-                        <?php endif; ?>
-                        <form method="POST" action="index.php">
-                            <input type="hidden" name="login" value="1">
-                            <div class="mb-3">
-                                <label for="username" class="form-label">Username</label>
-                                <input type="text" class="form-control" id="username" name="username" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="password" class="form-label">Password</label>
-                                <input type="password" class="form-control" id="password" name="password" required>
-                            </div>
-                            <div class="d-grid">
-                                <button type="submit" class="btn btn-primary">Login</button>
-                            </div>
-                        </form>
-                    </div>
+        <div class="login-container">
+            <h2 class="text-center mb-4">Login</h2>
+
+            <?php if ($error_message): ?>
+                <div class="alert alert-danger"><?php echo htmlspecialchars($error_message); ?></div>
+            <?php endif; ?>
+
+            <?php if ($success_message): ?>
+                <div class="alert alert-success"><?php echo htmlspecialchars($success_message); ?></div>
+            <?php endif; ?>
+
+            <form method="POST" action="login_page.php">
+                <div class="mb-3">
+                    <label for="username" class="form-label">Username</label>
+                    <input type="text" class="form-control" id="username" name="username" required autofocus>
                 </div>
-            </div>
+                <div class="mb-3">
+                    <label for="password" class="form-label">Password</label>
+                    <input type="password" class="form-control" id="password" name="password" required>
+                </div>
+                <div class="d-grid mt-4">
+                    <button type="submit" class="btn btn-primary btn-lg">Login</button>
+                </div>
+            </form>
         </div>
     </div>
 </body>

@@ -1,264 +1,135 @@
 <?php
-// Pastikan hanya teknisi yang bisa mengakses halaman ini
-if ($_SESSION['role'] !== 'teknisi') {
-    echo '<div class="alert alert-danger">Akses ditolak. Halaman ini hanya untuk teknisi.</div>';
+/**
+ * Halaman Dashboard untuk Teknisi.
+ *
+ * Menampilkan daftar tugas (laporan gangguan) yang ditugaskan
+ * kepada teknisi yang sedang login.
+ *
+ * @package PPPOE_MANAGER
+ */
+
+// Keamanan: Pastikan hanya teknisi yang bisa mengakses halaman ini.
+if ($_SESSION['level'] !== 'teknisi') {
+    echo '<div class="alert alert-danger">Anda tidak memiliki izin untuk mengakses halaman ini.</div>';
     return;
 }
 
-// Data yang dibutuhkan akan diambil di index.php
-// $customers_with_reports_coords, $assigned_reports_summary
+// Inisialisasi variabel
+$teknisi_id = $_SESSION['user_id'];
+$error_message = '';
+$success_message = '';
+
+// --- Logika untuk Update Status Laporan ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_status') {
+    $gangguan_id = $_POST['gangguan_id'] ?? null;
+    $new_status = $_POST['status_gangguan'] ?? null;
+
+    if ($gangguan_id && $new_status) {
+        // Verifikasi bahwa tiket ini memang milik teknisi yang login untuk keamanan
+        $stmt_verify = $pdo->prepare("SELECT id FROM gangguan WHERE id = ? AND teknisi_id = ?");
+        $stmt_verify->execute([$gangguan_id, $teknisi_id]);
+        
+        if ($stmt_verify->fetch()) {
+            // Jika verifikasi berhasil, update status
+            try {
+                $tanggal_selesai = ($new_status === 'selesai') ? date('Y-m-d H:i:s') : null;
+                $stmt_update = $pdo->prepare("UPDATE gangguan SET status_gangguan = ?, tanggal_selesai = ? WHERE id = ?");
+                $stmt_update->execute([$new_status, $tanggal_selesai, $gangguan_id]);
+                $success_message = "Status laporan berhasil diperbarui.";
+            } catch (PDOException $e) {
+                $error_message = "Gagal memperbarui status: " . $e->getMessage();
+            }
+        } else {
+            $error_message = "Aksi tidak diizinkan. Laporan ini tidak ditugaskan kepada Anda.";
+        }
+    }
+}
+
+// --- Ambil semua laporan yang ditugaskan ke teknisi ini ---
+try {
+    $stmt = $pdo->prepare("
+        SELECT g.*, p.nama_pelanggan, p.alamat, p.no_hp
+        FROM gangguan g
+        JOIN pelanggan p ON g.pelanggan_id = p.id
+        WHERE g.teknisi_id = ?
+        ORDER BY FIELD(g.status_gangguan, 'terbuka', 'dalam pengerjaan', 'selesai'), g.tanggal_laporan DESC
+    ");
+    $stmt->execute([$teknisi_id]);
+    $laporan_list = $stmt->fetchAll();
+} catch (PDOException $e) {
+    $laporan_list = [];
+    $error_message = "Gagal memuat daftar tugas: " . $e->getMessage();
+}
+
 ?>
 
-<!-- Leaflet.js CSS -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<style>
-    #teknisiMap {
-        height: 60vh; /* Sedikit lebih kecil untuk ringkasan laporan */
-        width: 100%;
-        border-radius: 0.375rem;
-        margin-bottom: 1.5rem;
-    }
-    .leaflet-popup-content-wrapper {
-        background-color: #2c3034;
-        color: #d1d2d3;
-        border-radius: 0.375rem;
-    }
-    .leaflet-popup-content {
-        margin: 13px 20px;
-    }
-    .leaflet-popup-tip {
-        background: #2c3034;
-    }
-    .legend {
-        padding: 6px 8px;
-        font: 14px;
-        background: rgba(33, 37, 41, 0.8);
-        color: #d1d2d3;
-        box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
-        border-radius: 5px;
-    }
-    .legend i {
-        width: 18px;
-        height: 18px;
-        float: left;
-        margin-right: 8px;
-        opacity: 0.9;
-        border-radius: 50%;
-        border: 1px solid #fff;
-    }
-    /* Style for custom locate button (no longer needed as a button, but keeping styles if any part of Leaflet uses it) */
-    .leaflet-control-locate {
-        display: none; /* Hide the control button as it's now automatic */
-    }
-</style>
+<div class="container-fluid">
+    <?php if ($success_message): ?><div class="alert alert-success"><?php echo htmlspecialchars($success_message); ?></div><?php endif; ?>
+    <?php if ($error_message): ?><div class="alert alert-danger"><?php echo htmlspecialchars($error_message); ?></div><?php endif; ?>
 
-<div class="row mb-4">
-    <div class="col-lg-3 col-md-6 mb-4">
-        <div class="card h-100">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <div class="text-muted small">Total Laporan Ditugaskan</div>
-                    <div class="fs-4 fw-bold"><?= $assigned_reports_summary['total'] ?? 0 ?></div>
-                </div>
-                <i class="fas fa-clipboard-list fa-2x text-primary ms-3"></i>
-            </div>
+    <div class="card">
+        <div class="card-header">
+            <h5><i class="fas fa-tasks me-2"></i>Daftar Tugas Saya</h5>
         </div>
-    </div>
-    <div class="col-lg-3 col-md-6 mb-4">
-        <div class="card h-100">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <div class="text-muted small">Laporan Pending</div>
-                    <div class="fs-4 fw-bold"><?= $assigned_reports_summary['Pending'] ?? 0 ?></div>
-                </div>
-                <i class="fas fa-hourglass-half fa-2x text-warning ms-3"></i>
-            </div>
-        </div>
-    </div>
-    <div class="col-lg-3 col-md-6 mb-4">
-        <div class="card h-100">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <div class="text-muted small">Laporan Dalam Proses</div>
-                    <div class="fs-4 fw-bold"><?= $assigned_reports_summary['In Progress'] ?? 0 ?></div>
-                </div>
-                <i class="fas fa-tools fa-2x text-info ms-3"></i>
-            </div>
-        </div>
-    </div>
-    <div class="col-lg-3 col-md-6 mb-4">
-        <div class="card h-100">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <div class="text-muted small">Laporan Selesai</div>
-                    <div class="fs-4 fw-bold"><?= $assigned_reports_summary['Resolved'] ?? 0 ?></div>
-                </div>
-                <i class="fas fa-check-circle fa-2x text-success ms-3"></i>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-bordered table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Status</th>
+                            <th>Tgl Laporan</th>
+                            <th>Pelanggan</th>
+                            <th>Alamat & Kontak</th>
+                            <th>Deskripsi Gangguan</th>
+                            <th style="width: 20%;">Ubah Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (count($laporan_list) > 0): ?>
+                            <?php foreach ($laporan_list as $laporan): ?>
+                                <tr>
+                                    <td>
+                                        <?php 
+                                        $status_class = 'bg-secondary';
+                                        if ($laporan['status_gangguan'] == 'selesai') $status_class = 'bg-success';
+                                        if ($laporan['status_gangguan'] == 'terbuka') $status_class = 'bg-danger';
+                                        if ($laporan['status_gangguan'] == 'dalam pengerjaan') $status_class = 'bg-warning text-dark';
+                                        ?>
+                                        <span class="badge <?php echo $status_class; ?>"><?php echo ucfirst($laporan['status_gangguan']); ?></span>
+                                    </td>
+                                    <td><?php echo date('d M Y, H:i', strtotime($laporan['tanggal_laporan'])); ?></td>
+                                    <td><?php echo htmlspecialchars($laporan['nama_pelanggan']); ?></td>
+                                    <td>
+                                        <?php echo htmlspecialchars($laporan['alamat']); ?><br>
+                                        <small class="text-muted"><i class="fas fa-phone-alt me-1"></i><?php echo htmlspecialchars($laporan['no_hp']); ?></small>
+                                    </td>
+                                    <td><?php echo nl2br(htmlspecialchars($laporan['deskripsi'])); ?></td>
+                                    <td>
+                                        <?php if ($laporan['status_gangguan'] !== 'selesai'): ?>
+                                        <form method="POST" action="?page=teknisi_dashboard">
+                                            <input type="hidden" name="action" value="update_status">
+                                            <input type="hidden" name="gangguan_id" value="<?php echo $laporan['id']; ?>">
+                                            <div class="input-group">
+                                                <select name="status_gangguan" class="form-select form-select-sm">
+                                                    <option value="terbuka" <?php echo ($laporan['status_gangguan'] == 'terbuka') ? 'selected' : ''; ?>>Terbuka</option>
+                                                    <option value="dalam pengerjaan" <?php echo ($laporan['status_gangguan'] == 'dalam pengerjaan') ? 'selected' : ''; ?>>Dalam Pengerjaan</option>
+                                                    <option value="selesai" <?php echo ($laporan['status_gangguan'] == 'selesai') ? 'selected' : ''; ?>>Selesai</option>
+                                                </select>
+                                                <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-check"></i></button>
+                                            </div>
+                                        </form>
+                                        <?php else: ?>
+                                            <span class="text-success"><i class="fas fa-check-circle me-1"></i> Selesai pada <?php echo date('d M Y', strtotime($laporan['tanggal_selesai'])); ?></span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <tr><td colspan="6" class="text-center">Tidak ada tugas yang ditugaskan kepada Anda saat ini.</td></tr>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 </div>
-
-<div class="card shadow-sm">
-    <div class="card-header">
-        <h5 class="card-title mb-0 text-white">Peta Lokasi Gangguan Ditugaskan</h5>
-    </div>
-    <div class="card-body">
-        <div id="teknisiMap"></div>
-    </div>
-</div>
-
-<!-- Leaflet.js JavaScript -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Inisialisasi peta, berpusat di Indonesia
-        const map = L.map('teknisiMap').setView([-2.548926, 118.0148634], 5);
-
-        // Tambahkan layer peta dari Esri World Imagery (Satellite)
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            maxZoom: 18,
-            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-        }).addTo(map);
-
-        // Ambil data pelanggan dengan laporan dari PHP
-        // $customers_with_reports_coords sekarang sudah diolah di index.php
-        const customersWithReports = <?= json_encode($customers_with_reports_coords ?? []) ?>;
-
-        // Buat ikon kustom untuk status laporan
-        const icons = {
-            'Pending': L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] }),
-            'In Progress': L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] }),
-            'Resolved': L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] }),
-            'Cancelled': L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-grey.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] })
-        };
-
-        const markerBounds = [];
-
-        // Loop melalui data pelanggan dan tambahkan marker ke peta
-        customersWithReports.forEach(customer => {
-            const coords = customer.coords.split(',').map(coord => parseFloat(coord.trim()));
-            if (coords.length === 2 && !isNaN(coords[0]) && !isNaN(coords[1])) {
-                const [lat, lng] = coords;
-                
-                // Pilih ikon berdasarkan status laporan (jika ada laporan)
-                const iconToUse = icons[customer.report_status] || icons['Pending']; // Default ke Pending jika status tidak dikenal
-
-                const marker = L.marker([lat, lng], { icon: iconToUse }).addTo(map);
-                
-                // Tambahkan popup dengan info laporan
-                marker.bindPopup(`
-                    <b>${customer.name}</b><br>
-                    Status Laporan: ${customer.report_status}<br>
-                    Deskripsi: ${customer.issue_description}<br>
-                    Dilaporkan oleh: ${customer.reported_by}<br>
-                    Tanggal Lapor: ${customer.created_at}
-                `);
-
-                // Simpan koordinat untuk auto-zoom
-                markerBounds.push([lat, lng]);
-            }
-        });
-
-        // Auto-zoom ke area di mana ada marker
-        if (markerBounds.length > 0) {
-            map.fitBounds(markerBounds, { padding: [50, 50] });
-        }
-
-        // Tambahkan legenda
-        const legend = L.control({ position: 'bottomright' });
-        legend.onAdd = function(map) {
-            const div = L.DomUtil.create('div', 'info legend');
-            const statuses = {
-                'Pending': '#dc3545', // red
-                'In Progress': '#0d6efd', // blue
-                'Resolved': '#28a745', // green
-                'Cancelled': '#6c757d' // grey
-            };
-            let legendHtml = '<h6>Status Laporan</h6>';
-            for (const status in statuses) {
-                legendHtml += `<i style="background:${statuses[status]}"></i> ${status}<br>`;
-            }
-            div.innerHTML = legendHtml;
-            return div;
-        };
-        legend.addTo(map);
-
-        // Logika lokasi teknisi real-time
-        let currentLocationMarker;
-        let watchId; // Untuk menyimpan ID dari watchPosition
-
-        // Create a custom icon for current location (e.g., blue dot)
-        const blueDotIcon = L.divIcon({
-            className: 'custom-div-icon',
-            html: '<div style="background-color:#007bff; width: 15px; height: 15px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 5px rgba(0,0,0,0.5);"></div>',
-            iconSize: [15, 15],
-            iconAnchor: [7.5, 7.5]
-        });
-
-        function updateCurrentLocation(position) {
-            const latlng = [position.coords.latitude, position.coords.longitude];
-
-            if (currentLocationMarker) {
-                currentLocationMarker.setLatLng(latlng); // Update marker position
-            } else {
-                currentLocationMarker = L.marker(latlng, {icon: blueDotIcon}).addTo(map)
-                    .bindPopup("Lokasi Anda").openPopup(); // Updated popup text
-            }
-            // Optional: Center map on current location after first update
-            // map.setView(latlng, map.getZoom() || 16); 
-        }
-
-        function handleLocationError(error) {
-            let message = "Gagal mendapatkan lokasi Anda.";
-            switch(error.code) {
-                case error.PERMISSION_DENIED:
-                    message = "Akses lokasi ditolak. Harap izinkan akses lokasi di browser Anda.";
-                    break;
-                case error.POSITION_UNAVAILABLE:
-                    message = "Informasi lokasi tidak tersedia.";
-                    break;
-                case error.TIMEOUT:
-                    message = "Waktu habis saat mencoba mendapatkan lokasi.";
-                    break;
-                case error.UNKNOWN_ERROR:
-                    message = "Terjadi kesalahan yang tidak diketahui.";
-                    break;
-            }
-            // Using showToast instead of alert for better UI integration
-            showToast(message, 'warning'); 
-            // Hentikan pelacakan jika ada error
-            if (watchId) {
-                navigator.geolocation.clearWatch(watchId);
-                watchId = null;
-            }
-            if (currentLocationMarker) {
-                map.removeLayer(currentLocationMarker);
-                currentLocationMarker = null;
-            }
-        }
-
-        // Mulai pelacakan lokasi secara otomatis saat halaman dimuat
-        if (navigator.geolocation) {
-            // watchPosition akan terus memantau lokasi dan memanggil updateCurrentLocation
-            watchId = navigator.geolocation.watchPosition(
-                updateCurrentLocation,
-                handleLocationError,
-                { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 } // Perbarui setiap 5 detik
-            );
-            // Optional: Set view to current location initially, but watchPosition will handle ongoing updates
-            // map.locate({setView: true, maxZoom: 16}); 
-        } else {
-            showToast('Geolocation tidak didukung oleh browser Anda.', 'error');
-        }
-
-        // Cleanup function when component is unloaded (important for single-page apps or complex navigations)
-        // In a multi-page PHP app, this might not be strictly necessary as page reloads clear JS state,
-        // but it's good practice for robust Geolocation API usage.
-        window.addEventListener('beforeunload', function() {
-            if (watchId) {
-                navigator.geolocation.clearWatch(watchId);
-            }
-        });
-    });
-</script>

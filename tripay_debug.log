@@ -1,0 +1,106 @@
+[2025-07-26 08:07:58] Requesting payment for invoice INV-20250726-688480D44170. Data sent: {
+    "method": "ALFAMART",
+    "merchant_ref": "INV-20250726-688480D44170",
+    "amount": 150000,
+    "customer_name": "boby",
+    "customer_email": "0007656@ricorhiiverz.my.id",
+    "customer_phone": "082273501050",
+    "order_items": [
+        {
+            "sku": "TAGIHAN2025-07",
+            "name": "Tagihan Internet Bulan July 2025",
+            "price": 150000,
+            "quantity": 1
+        }
+    ],
+    "callback_url": "https:\/\/ricorhiiverz.my.id\/APK\/callback.php",
+    "return_url": "https:\/\/ricorhiiverz.my.id\/APK\/cek_tagihan.php",
+    "expired_time": 1753603678,
+    "signature": "9cc274e20f25ccb4e60aeb0d887dc527162333256eea7e9ae6b309f19f483a1e"
+}
+[2025-07-26 08:07:59] Raw response from Tripay: {"success":true,"message":"","data":{"reference":"DEV-T23738262800IGBAZ","merchant_ref":"INV-20250726-688480D44170","payment_selection_type":"static","payment_method":"ALFAMART","payment_name":"Alfamart","customer_name":"boby","customer_email":"0007656@ricorhiiverz.my.id","customer_phone":"082273501050","callback_url":"https:\/\/ricorhiiverz.my.id\/APK\/callback.php","return_url":"https:\/\/ricorhiiverz.my.id\/APK\/cek_tagihan.php","amount":153500,"fee_merchant":0,"fee_customer":3500,"total_fee":3500,"amount_received":150000,"pay_code":"766384787686329","pay_url":null,"checkout_url":"https:\/\/tripay.co.id\/checkout\/DEV-T23738262800IGBAZ","status":"UNPAID","expired_time":1753603618,"order_items":[{"sku":"TAGIHAN2025-07","name":"Tagihan Internet Bulan July 2025","price":150000,"quantity":1,"subtotal":150000,"product_url":null,"image_url":null}],"instructions":[{"title":"Pembayaran via ALFAMART","steps":["Datang ke Alfamart","Sampaikan ke kasir ingin melakukan pembayaran aplikasi <b>Linkita<\/b>","Berikan kode bayar (<b>766384787686329<\/b>) ke kasir","Bayar sesuai jumlah yang diinfokan oleh kasir","Simpan struk bukti pembayaran Anda"]}]}}
+[2025-07-26 08:07:59] Tripay API Error: 
+[2025-07-26 08:09:48] Requesting payment for invoice INV-20250726-688480D44170. Data sent: {
+    "method": "ALFAMART",
+    "merchant_ref": "INV-20250726-688480D44170",
+    "amount": 150000,
+    "customer_name": "boby",
+    "customer_email": "0007656@ricorhiiverz.my.id",
+    "customer_phone": "082273501050",
+    "order_items": [
+        {
+            "sku": "TAGIHAN2025-07",
+            "name": "Tagihan Internet Bulan July 2025",
+            "price": 150000,
+            "quantity": 1
+        }
+    ],
+    "callback_url": "https:\/\/ricorhiiverz.my.id\/APK\/callback.php",
+    "return_url": "https:\/\/ricorhiiverz.my.id\/APK\/cek_tagihan.php",
+    "expired_time": 1753603788,
+    "signature": "9cc274e20f25ccb4e60aeb0d887dc527162333256eea7e9ae6b309f19f483a1e"
+}
+[2025-07-26 08:09:48] Raw response from Tripay: {"success":true,"message":"","data":{"reference":"DEV-T23738262801CX525","merchant_ref":"INV-20250726-688480D44170","payment_selection_type":"static","payment_method":"ALFAMART","payment_name":"Alfamart","customer_name":"boby","customer_email":"0007656@ricorhiiverz.my.id","customer_phone":"082273501050","callback_url":"https:\/\/ricorhiiverz.my.id\/APK\/callback.php","return_url":"https:\/\/ricorhiiverz.my.id\/APK\/cek_tagihan.php","amount":153500,"fee_merchant":0,"fee_customer":3500,"total_fee":3500,"amount_received":150000,"pay_code":"384825316323508","pay_url":null,"checkout_url":"https:\/\/tripay.co.id\/checkout\/DEV-T23738262801CX525","status":"UNPAID","expired_time":1753603728,"order_items":[{"sku":"TAGIHAN2025-07","name":"Tagihan Internet Bulan July 2025","price":150000,"quantity":1,"subtotal":150000,"product_url":null,"image_url":null}],"instructions":[{"title":"Pembayaran via ALFAMART","steps":["Datang ke Alfamart","Sampaikan ke kasir ingin melakukan pembayaran aplikasi <b>Linkita<\/b>","Berikan kode bayar (<b>384825316323508<\/b>) ke kasir","Bayar sesuai jumlah yang diinfokan oleh kasir","Simpan struk bukti pembayaran Anda"]}]}}
+[2025-07-26 08:20:38] Requesting payment for invoice INV-20250726-68848F2C34D7. Data sent: {
+    "method": "BSIVA",
+    "merchant_ref": "INV-20250726-68848F2C34D7",
+    "amount": 150000,
+    "customer_name": "boby",
+    "customer_email": "0007656@ricorhiiverz.my.id",
+    "customer_phone": "082273501050",
+    "order_items": [
+        {
+            "sku": "TAGIHAN2025-07",
+            "name": "Tagihan Internet Bulan July 2025",
+            "price": 150000,
+            "quantity": 1
+        }
+    ],
+    "callback_url": "https:\/\/ricorhiiverz.my.id\/APK\/callback.php",
+    "return_url": "https:\/\/ricorhiiverz.my.id\/APK\/cek_tagihan.php",
+    "expired_time": 1753604438,
+    "signature": "d2fa7600c3e0a3aaf5576883f5ad8a3200a1a4ec4bc8d134647fb6575c66d07d"
+}
+[2025-07-26 08:20:38] Raw response from Tripay: {"success":true,"message":"","data":{"reference":"DEV-T23738262803UEPSI","merchant_ref":"INV-20250726-68848F2C34D7","payment_selection_type":"static","payment_method":"BSIVA","payment_name":"BSI Virtual Account","customer_name":"boby","customer_email":"0007656@ricorhiiverz.my.id","customer_phone":"082273501050","callback_url":"https:\/\/ricorhiiverz.my.id\/APK\/callback.php","return_url":"https:\/\/ricorhiiverz.my.id\/APK\/cek_tagihan.php","amount":154250,"fee_merchant":0,"fee_customer":4250,"total_fee":4250,"amount_received":150000,"pay_code":"913803600940516","pay_url":null,"checkout_url":"https:\/\/tripay.co.id\/checkout\/DEV-T23738262803UEPSI","status":"UNPAID","expired_time":1753528778,"order_items":[{"sku":"TAGIHAN2025-07","name":"Tagihan Internet Bulan July 2025","price":150000,"quantity":1,"subtotal":150000,"product_url":null,"image_url":null}],"instructions":[{"title":"BYOND by BSI","steps":["Buka aplikasi BYON by BSI","Pilih menu <b>Bayar & Beli<\/b>","Pilih <b>Lembaga<\/b>","Masukkan kode institusi 1062, pilih <b>LINKQU<\/b>","Masukkan <b>Kode VA<\/b>","Klik tombol <b>Lanjutkan<\/b>","Akan ditampikan detail transaksi, pastikan sudah sesuai","Klik tombol <b>Konfirmasi<\/b>","Masukan PIN Anda","Transaksi selesai, simpan bukti pembayaran Anda"]},{"title":"Internet Banking","steps":["Masuk ke Internet Banking BSI Anda","Pilih menu <b>Pembayaran<\/b>","Pilih nomor rekening Anda","Pilih <b>Jenis Pembayaran > Institusi<\/b>","Pada opsi Nama Institusi, pilih <b>1062 LINKQU<\/b>","Masukkan kode bayar (<b>913803600940516<\/b>)","Klik tombol <b>Verifikasi<\/b>","Akan ditampikan detail transaksi, pastikan sudah sesuai","Masukkan TAN & PIN Anda","Tekan tombol <b>Submit<\/b>","Transaksi selesai, simpan bukti pembayaran Anda"]},{"title":"BSI Mobile","steps":["Masuk ke aplikasi BSI Mobile Anda","Pilih menu <b>Bayar<\/b>","Pilih menu <b>Institusi<\/b>","Pada opsi Nama Institusi, pilih <b>1062 LINKQU<\/b>","Masukkan kode bayar (<b>913803600940516<\/b>)","Klik <b>Selanjutnya<\/b>","Masukkan PIN Anda","Klik <b>Selanjutnya<\/b>","Akan ditampikan detail transaksi, pastikan sudah sesuai","Klik <b>Selanjutnya<\/b>","Transaksi selesai, simpan bukti pembayaran Anda"]},{"title":"ATM BSI","steps":["Datang ke ATM BSI","Masukkan kartu dan PIN kartu Anda","Pilih menu <b>Pembayaran<\/b>","Pilih <b>Institusi<\/b>","Masukkan kode institusi 1062 + Nomor Virtual Account Anda. Contoh: <b>1062913803600940516<\/b>","Tekan tombol <b>Benar<\/b>","Akan ditampikan detail transaksi, pastikan sudah sesuai","Tekan tombol <b>BENAR\/YA<\/b>","Transaksi selesai, simpan bukti pembayaran Anda"]}]}}
+[2025-07-26 08:32:08] Requesting payment for invoice INV-20250726-688492786421. Data sent: {
+    "method": "QRIS2",
+    "merchant_ref": "INV-20250726-688492786421",
+    "amount": 150000,
+    "customer_name": "boby",
+    "customer_email": "0007656@ricorhiiverz.my.id",
+    "customer_phone": "082273501050",
+    "order_items": [
+        {
+            "sku": "TAGIHAN2025-07",
+            "name": "Tagihan Internet Bulan July 2025",
+            "price": 150000,
+            "quantity": 1
+        }
+    ],
+    "callback_url": "https:\/\/ricorhiiverz.my.id\/APK\/callback.php",
+    "return_url": "https:\/\/ricorhiiverz.my.id\/APK\/cek_tagihan.php",
+    "expired_time": 1753605128,
+    "signature": "d5affc8634153e900af338889345b30e7e99a28a7b6dc7fbaa6d0f9598a302e4"
+}
+[2025-07-26 08:32:08] Raw response from Tripay: {"success":true,"message":"","data":{"reference":"DEV-T237382628041DDXJ","merchant_ref":"INV-20250726-688492786421","payment_selection_type":"static","payment_method":"QRIS2","payment_name":"QRIS","customer_name":"boby","customer_email":"0007656@ricorhiiverz.my.id","customer_phone":"082273501050","callback_url":"https:\/\/ricorhiiverz.my.id\/APK\/callback.php","return_url":"https:\/\/ricorhiiverz.my.id\/APK\/cek_tagihan.php","amount":150000,"fee_merchant":1800,"fee_customer":0,"total_fee":1800,"amount_received":148200,"pay_code":null,"pay_url":null,"checkout_url":"https:\/\/tripay.co.id\/checkout\/DEV-T237382628041DDXJ","status":"UNPAID","expired_time":1753605068,"order_items":[{"sku":"TAGIHAN2025-07","name":"Tagihan Internet Bulan July 2025","price":150000,"quantity":1,"subtotal":150000,"product_url":null,"image_url":null}],"instructions":[{"title":"Pembayaran via QRIS","steps":["Masuk ke aplikasi dompet digital Anda yang telah mendukung QRIS","Pindai\/Scan QR Code yang tersedia","Akan muncul detail transaksi. Pastikan data transaksi sudah sesuai","Selesaikan proses pembayaran Anda","Transaksi selesai. Simpan bukti pembayaran Anda"]},{"title":"Pembayaran via QRIS (Mobile)","steps":["Download QR Code pada invoice","Masuk ke aplikasi dompet digital Anda yang telah mendukung QRIS","Upload QR Code yang telah di download tadi","Akan muncul detail transaksi. Pastikan data transaksi sudah sesuai","Selesaikan proses pembayaran Anda","Transaksi selesai. Simpan bukti pembayaran Anda"]}],"qr_string":"SANDBOX MODE","qr_url":"https:\/\/tripay.co.id\/qr\/DEV-T237382628041DDXJ"}}
+[2025-07-26 08:46:17] Requesting payment for invoice INV-20250726-688495AFD164. Data sent: {
+    "method": "QRIS2",
+    "merchant_ref": "INV-20250726-688495AFD164",
+    "amount": 150000,
+    "customer_name": "boby",
+    "customer_email": "0007656@ricorhiiverz.my.id",
+    "customer_phone": "082273501050",
+    "order_items": [
+        {
+            "sku": "TAGIHAN2025-07",
+            "name": "Tagihan Internet Bulan July 2025",
+            "price": 150000,
+            "quantity": 1
+        }
+    ],
+    "callback_url": "https:\/\/ricorhiiverz.my.id\/APK\/callback.php",
+    "return_url": "https:\/\/ricorhiiverz.my.id\/APK\/cek_tagihan.php",
+    "expired_time": 1753605977,
+    "signature": "56c8707d99c6cf2f47276d2548207a0f2abb33568a25b66d6dec7f4880060b23"
+}
+[2025-07-26 08:46:18] Raw response from Tripay: {"success":true,"message":"","data":{"reference":"DEV-T23738262806HI7BH","merchant_ref":"INV-20250726-688495AFD164","payment_selection_type":"static","payment_method":"QRIS2","payment_name":"QRIS","customer_name":"boby","customer_email":"0007656@ricorhiiverz.my.id","customer_phone":"082273501050","callback_url":"https:\/\/ricorhiiverz.my.id\/APK\/callback.php","return_url":"https:\/\/ricorhiiverz.my.id\/APK\/cek_tagihan.php","amount":150000,"fee_merchant":1800,"fee_customer":0,"total_fee":1800,"amount_received":148200,"pay_code":null,"pay_url":null,"checkout_url":"https:\/\/tripay.co.id\/checkout\/DEV-T23738262806HI7BH","status":"UNPAID","expired_time":1753605918,"order_items":[{"sku":"TAGIHAN2025-07","name":"Tagihan Internet Bulan July 2025","price":150000,"quantity":1,"subtotal":150000,"product_url":null,"image_url":null}],"instructions":[{"title":"Pembayaran via QRIS","steps":["Masuk ke aplikasi dompet digital Anda yang telah mendukung QRIS","Pindai\/Scan QR Code yang tersedia","Akan muncul detail transaksi. Pastikan data transaksi sudah sesuai","Selesaikan proses pembayaran Anda","Transaksi selesai. Simpan bukti pembayaran Anda"]},{"title":"Pembayaran via QRIS (Mobile)","steps":["Download QR Code pada invoice","Masuk ke aplikasi dompet digital Anda yang telah mendukung QRIS","Upload QR Code yang telah di download tadi","Akan muncul detail transaksi. Pastikan data transaksi sudah sesuai","Selesaikan proses pembayaran Anda","Transaksi selesai. Simpan bukti pembayaran Anda"]}],"qr_string":"SANDBOX MODE","qr_url":"https:\/\/tripay.co.id\/qr\/DEV-T23738262806HI7BH"}}

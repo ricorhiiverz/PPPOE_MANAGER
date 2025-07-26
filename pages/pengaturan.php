@@ -1,234 +1,167 @@
 <?php
-// Pastikan hanya admin yang bisa mengakses halaman ini
-if ($_SESSION['role'] !== 'admin') {
-    echo '<div class="alert alert-danger">Akses ditolak. Halaman ini hanya untuk admin.</div>';
-    return; // Hentikan eksekusi script jika bukan admin
+/**
+ * Halaman Pengaturan Aplikasi.
+ *
+ * Memungkinkan admin untuk mengelola semua konfigurasi sistem
+ * yang disimpan di dalam tabel 'pengaturan' di database.
+ *
+ * @package PPPOE_MANAGER
+ */
+
+// Keamanan: Pastikan hanya admin yang bisa mengakses halaman ini.
+if ($_SESSION['level'] !== 'admin') {
+    echo '<div class="alert alert-danger">Anda tidak memiliki izin untuk mengakses halaman ini.</div>';
+    return; // Hentikan eksekusi jika bukan admin.
 }
+
+// Inisialisasi variabel pesan.
+$success_message = '';
+$error_message = '';
+
+// Proses form jika metode request adalah POST.
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Keamanan tambahan: Pastikan hanya admin yang bisa mengirim data ke halaman ini.
+    if ($_SESSION['level'] !== 'admin') {
+        $error_message = "Aksi tidak diizinkan.";
+    } else {
+        try {
+            // Menggunakan logika "UPSERT" (INSERT ... ON DUPLICATE KEY UPDATE)
+            $stmt = $pdo->prepare("
+                INSERT INTO pengaturan (setting_name, setting_value) 
+                VALUES (:setting_name, :setting_value) 
+                ON DUPLICATE KEY UPDATE setting_value = :setting_value
+            ");
+
+            // Mulai transaksi untuk memastikan semua pembaruan berhasil.
+            $pdo->beginTransaction();
+
+            // Loop melalui semua data yang dikirim dari form.
+            foreach ($_POST as $key => $value) {
+                // Logika untuk tidak menghapus password jika kosong.
+                if ($key === 'mikrotik_pass' && empty($value)) {
+                    continue; 
+                }
+                
+                // Update atau Insert setiap pengaturan di database.
+                $stmt->execute([
+                    ':setting_name' => $key,
+                    ':setting_value' => trim($value)
+                ]);
+            }
+
+            // Jika semua berhasil, commit perubahan.
+            $pdo->commit();
+
+            $success_message = "Pengaturan berhasil diperbarui!";
+
+            // Muat ulang pengaturan ke dalam variabel $app_settings
+            $app_settings = load_app_settings($pdo);
+
+        } catch (PDOException $e) {
+            // Jika terjadi error, batalkan semua perubahan.
+            $pdo->rollBack();
+            $error_message = "Gagal memperbarui pengaturan: " . $e->getMessage();
+        }
+    }
+}
+
 ?>
 
-<div class="card shadow-sm mb-4">
-    <div class="card-header"><h5 class="card-title mb-0 text-white">Pengaturan Koneksi MikroTik</h5></div>
-    <div class="card-body">
-        <form action="index.php?page=pengaturan" method="POST">
-            <input type="hidden" name="action" value="save_settings">
-            <div class="mb-3">
-                <label for="router_ip" class="form-label">Alamat IP / Host MikroTik</label>
-                <input type="text" name="router_ip" id="router_ip" class="form-control" value="<?= htmlspecialchars($settings['router_ip'] ?? '') ?>" required>
-                <div class="form-text">Contoh: 192.168.88.1 atau 103.125.173.30:1003 (jika menggunakan port non-standar)</div>
-            </div>
-            <div class="mb-3">
-                <label for="router_user" class="form-label">Username MikroTik API</label>
-                <input type="text" name="router_user" id="router_user" class="form-control" value="<?= htmlspecialchars($settings['router_user'] ?? '') ?>" required>
-            </div>
-            <div class="mb-3">
-                <label for="router_pass" class="form-label">Password MikroTik API</label>
-                <input type="password" name="router_pass" id="router_pass" class="form-control" value="<?= htmlspecialchars($settings['router_pass'] ?? '') ?>" placeholder="Kosongkan jika tidak ingin diubah">
-                <div class="form-text">Kosongkan jika tidak ingin mengubah password yang sudah tersimpan.</div>
-            </div>
-            <?php if ($_SESSION['role'] === 'admin'): ?>
-            <button type="submit" class="btn btn-primary">Simpan Pengaturan MikroTik</button>
-            <?php endif; ?>
-        </form>
-    </div>
-</div>
+<?php if ($success_message): ?>
+    <div class="alert alert-success"><?php echo htmlspecialchars($success_message); ?></div>
+<?php endif; ?>
+<?php if ($error_message): ?>
+    <div class="alert alert-danger"><?php echo htmlspecialchars($error_message); ?></div>
+<?php endif; ?>
 
-<div class="card shadow-sm mb-4">
-    <div class="card-header"><h5 class="card-title mb-0 text-white">Pengaturan Koneksi Database (MySQL)</h5></div>
-    <div class="card-body">
-        <form action="index.php?page=pengaturan" method="POST">
-            <input type="hidden" name="action" value="save_settings">
-            <div class="mb-3">
-                <label for="db_host" class="form-label">Host Database</label>
-                <input type="text" name="db_host" id="db_host" class="form-control" value="<?= htmlspecialchars($settings['db_host'] ?? '') ?>" required>
-                <div class="form-text">Contoh: localhost atau 127.0.0.1</div>
-            </div>
-            <div class="mb-3">
-                <label for="db_port" class="form-label">Port Database</label>
-                <input type="number" name="db_port" id="db_port" class="form-control" value="<?= htmlspecialchars($settings['db_port'] ?? '3306') ?>" required>
-                <div class="form-text">Port default MySQL adalah 3306.</div>
-            </div>
-            <div class="mb-3">
-                <label for="db_name" class="form-label">Nama Database</label>
-                <input type="text" name="db_name" id="db_name" class="form-control" value="<?= htmlspecialchars($settings['db_name'] ?? '') ?>" required>
-            </div>
-            <div class="mb-3">
-                <label for="db_user" class="form-label">Username Database</label>
-                <input type="text" name="db_user" id="db_user" class="form-control" value="<?= htmlspecialchars($settings['db_user'] ?? '') ?>" required>
-            </div>
-            <div class="mb-3">
-                <label for="db_pass" class="form-label">Password Database</label>
-                <input type="password" name="db_pass" id="db_pass" class="form-control" value="<?= htmlspecialchars($settings['db_pass'] ?? '') ?>" placeholder="Kosongkan jika tidak ingin diubah">
-                <div class="form-text">Kosongkan jika tidak ingin mengubah password yang sudah tersimpan.</div>
-            </div>
-            <?php if ($_SESSION['role'] === 'admin'): ?>
-            <button type="submit" class="btn btn-primary">Simpan Pengaturan Database</button>
-            <?php endif; ?>
-        </form>
-    </div>
-</div>
-
-<div class="card shadow-sm mb-4">
-    <div class="card-header"><h5 class="card-title mb-0 text-white">Pengaturan Payment Gateway (Tripay)</h5></div>
-    <div class="card-body">
-        <form action="index.php?page=pengaturan" method="POST">
-            <input type="hidden" name="action" value="save_settings">
-            <div class="mb-3">
-                <label for="tripay_merchant_code" class="form-label">Tripay Merchant Code</label>
-                <input type="text" name="tripay_merchant_code" id="tripay_merchant_code" class="form-control" value="<?= htmlspecialchars($settings['tripay_merchant_code'] ?? '') ?>" required>
-            </div>
-            <div class="mb-3">
-                <label for="tripay_api_key" class="form-label">Tripay API Key</label>
-                <input type="text" name="tripay_api_key" id="tripay_api_key" class="form-control" value="<?= htmlspecialchars($settings['tripay_api_key'] ?? '') ?>" required>
-            </div>
-            <div class="mb-3">
-                <label for="tripay_private_key" class="form-label">Tripay Private Key</label>
-                <input type="text" name="tripay_private_key" id="tripay_private_key" class="form-control" value="<?= htmlspecialchars($settings['tripay_private_key'] ?? '') ?>" required>
-            </div>
-            <div class="form-check form-switch mb-3">
-                <input class="form-check-input" type="checkbox" id="tripay_production_mode" name="tripay_production_mode" <?= ($settings['tripay_production_mode'] ?? false) ? 'checked' : '' ?>>
-                <label class="form-check-label" for="tripay_production_mode">Mode Produksi (Aktifkan untuk transaksi riil)</label>
-            </div>
-            <?php if ($_SESSION['role'] === 'admin'): ?>
-            <button type="submit" class="btn btn-primary">Simpan Pengaturan Tripay</button>
-            <?php endif; ?>
-        </form>
-    </div>
-</div>
-
-<div class="card shadow-sm mb-4">
-    <div class="card-header"><h5 class="card-title mb-0 text-white">Pengaturan WhatsApp Gateway (Fonnte)</h5></div>
-    <div class="card-body">
-        <form action="index.php?page=pengaturan" method="POST" id="fonnteeSettingsForm">
-            <input type="hidden" name="action" value="save_settings">
-            <div class="mb-3">
-                <label for="fonnte_api_key" class="form-label">Fonnte API Key</label>
-                <input type="text" name="fonnte_api_key" id="fonnte_api_key" class="form-control" value="<?= htmlspecialchars($settings['fonnte_api_key'] ?? '') ?>">
-            </div>
-            <!-- Fonnte Instance ID dihapus dari form -->
-            <input type="hidden" name="fonnte_instance_id" id="fonnte_instance_id" value=""> <!-- Tetap kirim nilai kosong -->
-            <div class="mb-3">
-                <label for="fonnte_base_url" class="form-label">Fonnte Base URL</label>
-                <input type="text" name="fonnte_base_url" id="fonnte_base_url" class="form-control" value="<?= htmlspecialchars($settings['fonnte_base_url'] ?? 'https://api.fonnte.com/send') ?>">
-                <div class="form-text">URL default: https://api.fonnte.com/send</div>
-            </div>
-            <?php if ($_SESSION['role'] === 'admin'): ?>
-            <button type="submit" class="btn btn-primary me-2">Simpan Pengaturan Fonnte</button>
-            <button type="button" class="btn btn-info" data-bs-toggle="modal" data-bs-target="#testFonteeModal">Uji Fonnte API</button>
-            <?php endif; ?>
-        </form>
-    </div>
-</div>
-
-<div class="card shadow-sm">
-    <div class="card-header"><h5 class="card-title mb-0 text-white">Pengaturan Monitoring</h5></div>
-    <div class="card-body">
-        <form action="index.php?page=pengaturan" method="POST">
-            <input type="hidden" name="action" value="save_settings">
-            <div class="mb-3">
-                <label for="monitor_interface" class="form-label">Pilih Interface untuk Monitoring Traffic</label>
-                <select name="monitor_interface" id="monitor_interface" class="form-select" <?= $_SESSION['role'] !== 'admin' ? 'disabled' : '' ?>>
-                    <option value="">-- Tidak Ada --</option>
-                    <?php foreach ($interfaces as $interface): ?>
-                        <option value="<?= htmlspecialchars($interface['name']) ?>" <?= (isset($settings['monitor_interface']) && $settings['monitor_interface'] === $interface['name']) ? 'selected' : '' ?>>
-                            <?= htmlspecialchars($interface['name']) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-                <div class="form-text">Pilih interface utama (WAN/Internet) untuk melihat total traffic yang digunakan.</div>
-            </div>
-            <?php if ($_SESSION['role'] === 'admin'): ?>
-            <button type="submit" class="btn btn-primary">Simpan Pengaturan Monitoring</button>
-            <?php endif; ?>
-        </form>
-    </div>
-</div>
-
-<!-- Modal Uji Fontee API -->
-<div class="modal fade" id="testFonteeModal" tabindex="-1" aria-labelledby="testFonteeModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="testFonteeModalLabel">Uji Fonnte API</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <p class="text-muted">Kirim pesan uji ke nomor WhatsApp untuk memverifikasi pengaturan Fonnte API Anda.</p>
-                <div class="mb-3">
-                    <label for="test_phone_number" class="form-label">Nomor WhatsApp Tujuan (dengan kode negara)</label>
-                    <input type="tel" id="test_phone_number" class="form-control" placeholder="Contoh: 6281234567890">
-                    <div class="form-text">Pastikan nomor aktif dan terdaftar di WhatsApp.</div>
+<form method="POST" action="?page=pengaturan">
+    <div class="row">
+        <!-- Kolom Kiri: Pengaturan Umum & MikroTik -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5><i class="fas fa-building me-2"></i>Informasi ISP</h5>
                 </div>
-                <div class="mb-3">
-                    <label for="test_message" class="form-label">Pesan Uji</label>
-                    <textarea id="test_message" class="form-control" rows="3">Ini adalah pesan uji dari PPPoE Manager Anda.</textarea>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="nama_isp" class="form-label">Nama ISP</label>
+                        <input type="text" class="form-control" id="nama_isp" name="nama_isp" value="<?php echo htmlspecialchars($app_settings['nama_isp'] ?? ''); ?>">
+                    </div>
+                    <div class="mb-3">
+                        <label for="alamat_isp" class="form-label">Alamat ISP</label>
+                        <textarea class="form-control" id="alamat_isp" name="alamat_isp" rows="2"><?php echo htmlspecialchars($app_settings['alamat_isp'] ?? ''); ?></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="no_hp_isp" class="form-label">No. HP / Kontak</label>
+                        <input type="text" class="form-control" id="no_hp_isp" name="no_hp_isp" value="<?php echo htmlspecialchars($app_settings['no_hp_isp'] ?? ''); ?>">
+                    </div>
+                    <div class="mb-3">
+                        <label for="website_isp" class="form-label">Website</label>
+                        <input type="text" class="form-control" id="website_isp" name="website_isp" value="<?php echo htmlspecialchars($app_settings['website_isp'] ?? ''); ?>">
+                    </div>
                 </div>
-                <div id="test_result" class="mt-3"></div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
-                <button type="button" class="btn btn-primary" id="sendTestMessageBtn">Kirim Pesan Uji</button>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5><i class="fas fa-server me-2"></i>Konfigurasi MikroTik</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="mikrotik_ip" class="form-label">IP Address MikroTik</label>
+                        <input type="text" class="form-control" id="mikrotik_ip" name="mikrotik_ip" value="<?php echo htmlspecialchars($app_settings['mikrotik_ip'] ?? ''); ?>" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="mikrotik_user" class="form-label">Username MikroTik</label>
+                        <input type="text" class="form-control" id="mikrotik_user" name="mikrotik_user" value="<?php echo htmlspecialchars($app_settings['mikrotik_user'] ?? ''); ?>" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="mikrotik_pass" class="form-label">Password MikroTik</label>
+                        <input type="password" class="form-control" id="mikrotik_pass" name="mikrotik_pass" value="">
+                        <small class="form-text text-muted">Kosongkan jika tidak ingin mengubah password yang sudah ada.</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Kolom Kanan: Payment Gateway & Notifikasi -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5><i class="fas fa-credit-card me-2"></i>Payment Gateway (Tripay)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="payment_merchant_code" class="form-label">Kode Merchant</label>
+                        <input type="text" class="form-control" id="payment_merchant_code" name="payment_merchant_code" value="<?php echo htmlspecialchars($app_settings['payment_merchant_code'] ?? ''); ?>">
+                    </div>
+                    <div class="mb-3">
+                        <label for="payment_api_key" class="form-label">API Key</label>
+                        <input type="text" class="form-control" id="payment_api_key" name="payment_api_key" value="<?php echo htmlspecialchars($app_settings['payment_api_key'] ?? ''); ?>">
+                    </div>
+                    <div class="mb-3">
+                        <label for="payment_private_key" class="form-label">Private Key</label>
+                        <input type="text" class="form-control" id="payment_private_key" name="payment_private_key" value="<?php echo htmlspecialchars($app_settings['payment_private_key'] ?? ''); ?>">
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5><i class="fab fa-whatsapp me-2"></i>Notifikasi WhatsApp (Fonnte)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="fonnte_token" class="form-label">Fonnte Auth Token</label>
+                        <input type="text" class="form-control" id="fonnte_token" name="fonnte_token" value="<?php echo htmlspecialchars($app_settings['fonnte_token'] ?? ''); ?>">
+                        <small class="form-text text-muted">Masukkan token otorisasi dari akun Fonnte Anda.</small>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
-</div>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // ... (kode JavaScript yang sudah ada) ...
-
-    // Event listener untuk tombol "Kirim Pesan Uji" di modal Fontee
-    const sendTestMessageBtn = document.getElementById('sendTestMessageBtn');
-    if (sendTestMessageBtn) {
-        sendTestMessageBtn.addEventListener('click', function() {
-            const phoneNumber = document.getElementById('test_phone_number').value;
-            const message = document.getElementById('test_message').value;
-            const testResultDiv = document.getElementById('test_result');
-            
-            // Ambil pengaturan Fonnte dari form (bukan dari PHP langsung, karena mungkin belum disimpan)
-            const fonnteApiKey = document.getElementById('fonnte_api_key').value;
-            // Instance ID tidak lagi diambil dari input, karena sudah dihapus
-            // const fonnteInstanceId = document.getElementById('fonnte_instance_id').value; 
-            const fonnteBaseUrl = document.getElementById('fonnte_base_url').value;
-
-            // --- Validasi sisi klien baru ---
-            if (!fonnteApiKey || !fonnteBaseUrl) { // Validasi hanya untuk API Key dan Base URL
-                testResultDiv.innerHTML = '<div class="alert alert-danger">API Key dan Base URL Fonnte tidak boleh kosong. Harap isi semua kolom.</div>';
-                return; // Hentikan eksekusi jika ada kolom kosong
-            }
-            if (!phoneNumber) {
-                testResultDiv.innerHTML = '<div class="alert alert-danger">Nomor WhatsApp tujuan tidak boleh kosong.</div>';
-                return;
-            }
-            // --- Akhir Validasi sisi klien baru ---
-
-            testResultDiv.innerHTML = '<div class="text-center"><div class="spinner-border text-info" role="status"><span class="visually-hidden">Mengirim...</span></div></div>';
-            testResultDiv.classList.remove('alert', 'alert-success', 'alert-danger');
-
-            fetch('index.php?action=test_fonnte_api', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    to: phoneNumber,
-                    message: message,
-                    api_key: fonnteApiKey,
-                    base_url: fonnteBaseUrl
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    testResultDiv.innerHTML = `<div class="alert alert-success">Pesan berhasil dikirim! Respons: ${data.message}</div>`;
-                } else {
-                    testResultDiv.innerHTML = `<div class="alert alert-danger">Gagal mengirim pesan: ${data.message}</div>`;
-                }
-            })
-            .catch(error => {
-                console.error('Error testing Fonnte API:', error);
-                testResultDiv.innerHTML = `<div class="alert alert-danger">Terjadi kesalahan saat menguji API: ${error.message}</div>`;
-            });
-        });
-    }
-});
-</script>
+    <div class="d-grid">
+        <button type="submit" class="btn btn-primary btn-lg">Simpan Pengaturan</button>
+    </div>
+</form>

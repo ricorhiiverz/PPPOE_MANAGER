@@ -1,103 +1,163 @@
 <?php
-// Pastikan hanya admin yang bisa mengakses halaman ini
-if ($_SESSION['role'] !== 'admin') {
-    echo '<div class="alert alert-danger">Akses ditolak. Halaman ini hanya untuk admin.</div>';
-    return; // Hentikan eksekusi script jika bukan admin
+/**
+ * Halaman Manajemen Wilayah (Data Master).
+ *
+ * Mengelola data area/wilayah cakupan layanan.
+ * Semua operasi (Tambah, Edit, Hapus) dilakukan pada tabel 'wilayah' di database.
+ *
+ * @package PPPOE_MANAGER
+ *
+ * Catatan: File ini di-include oleh main_view.php, sehingga memiliki akses
+ * ke variabel $pdo, $app_settings, dan $_SESSION.
+ */
+
+// Keamanan: Pastikan hanya admin yang bisa mengakses halaman ini.
+if ($_SESSION['level'] !== 'admin') {
+    echo '<div class="alert alert-danger">Anda tidak memiliki izin untuk mengakses halaman ini.</div>';
+    return; // Hentikan eksekusi jika bukan admin.
 }
+
+// Inisialisasi variabel
+$action = $_GET['action'] ?? 'list'; // Aksi default adalah 'list'
+$wilayah_id = $_GET['id'] ?? null;
+$error_message = '';
+$success_message = '';
+
+// --- Logika untuk Memproses Form (Tambah/Edit) ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $nama_wilayah = trim($_POST['nama_wilayah']);
+    $id_to_update = $_POST['id'] ?? null;
+
+    if (empty($nama_wilayah)) {
+        $error_message = 'Nama wilayah tidak boleh kosong.';
+    } else {
+        try {
+            if ($id_to_update) {
+                // Proses UPDATE
+                $stmt = $pdo->prepare("UPDATE wilayah SET nama_wilayah = ? WHERE id = ?");
+                $stmt->execute([$nama_wilayah, $id_to_update]);
+                $success_message = 'Wilayah berhasil diperbarui.';
+            } else {
+                // Proses INSERT
+                $stmt = $pdo->prepare("INSERT INTO wilayah (nama_wilayah) VALUES (?)");
+                $stmt->execute([$nama_wilayah]);
+                $success_message = 'Wilayah baru berhasil ditambahkan.';
+            }
+        } catch (PDOException $e) {
+            $error_message = 'Operasi Gagal: ' . $e->getMessage();
+        }
+    }
+    // Setelah operasi, kembali ke halaman list
+    $action = 'list';
+}
+
+// --- Logika untuk Menghapus Data ---
+if ($action === 'delete' && $wilayah_id) {
+    try {
+        $stmt = $pdo->prepare("DELETE FROM wilayah WHERE id = ?");
+        $stmt->execute([$wilayah_id]);
+        $success_message = 'Wilayah berhasil dihapus.';
+    } catch (PDOException $e) {
+        // Error jika wilayah masih digunakan oleh pelanggan
+        if ($e->getCode() == '23000') {
+            $error_message = 'Gagal menghapus: Wilayah ini masih digunakan oleh data pelanggan.';
+        } else {
+            $error_message = 'Operasi Gagal: ' . $e->getMessage();
+        }
+    }
+    $action = 'list';
+}
+
+// Ambil data untuk form edit
+$wilayah_to_edit = null;
+if ($action === 'edit' && $wilayah_id) {
+    $stmt = $pdo->prepare("SELECT * FROM wilayah WHERE id = ?");
+    $stmt->execute([$wilayah_id]);
+    $wilayah_to_edit = $stmt->fetch();
+}
+
 ?>
 
-<div class="row">
-    <div class="col-md-5">
-        <div class="card shadow-sm">
-            <div class="card-header"><h5 class="card-title mb-0 text-white">Tambah Wilayah Baru</h5></div>
-            <div class="card-body">
-                <form action="" method="POST">
-                    <input type="hidden" name="action" value="add_wilayah">
-                    <div class="mb-3">
-                        <label for="nama_wilayah" class="form-label">Nama Wilayah/Area</label>
-                        <input type="text" name="nama_wilayah" id="nama_wilayah" class="form-control" required>
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-sm">Tambah</button>
-                </form>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-7">
-        <div class="card shadow-sm">
-            <div class="card-header"><h5 class="card-title mb-0 text-white">Daftar Wilayah</h5></div>
-            <div class="card-body table-responsive">
-                <table class="table table-hover align-middle">
-                    <thead><tr><th>Nama Wilayah</th><th class="text-center">Aksi</th></tr></thead>
-                    <tbody>
-                        <?php if (empty($wilayah_list)): ?>
-                            <tr><td colspan="2" class="text-center text-muted py-4">Belum ada data wilayah.</td></tr>
+<div class="container-fluid">
+    <?php if ($success_message): ?>
+        <div class="alert alert-success"><?php echo htmlspecialchars($success_message); ?></div>
+    <?php endif; ?>
+    <?php if ($error_message): ?>
+        <div class="alert alert-danger"><?php echo htmlspecialchars($error_message); ?></div>
+    <?php endif; ?>
+
+    <div class="row">
+        <!-- Kolom Form Tambah/Edit -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-map-marker-alt me-2"></i><?php echo $action === 'edit' ? 'Edit Wilayah' : 'Tambah Wilayah Baru'; ?></h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="?page=wilayah">
+                        <?php if ($action === 'edit' && $wilayah_to_edit): ?>
+                            <input type="hidden" name="id" value="<?php echo htmlspecialchars($wilayah_to_edit['id']); ?>">
                         <?php endif; ?>
-                        <?php foreach ($wilayah_list as $wilayah): ?>
-                        <tr>
-                            <td class="fw-bold"><?= htmlspecialchars($wilayah['region_name']) ?></td>
-                            <td class="text-center">
-                                <div class="btn-group">
-                                    <button type="button" class="btn btn-sm btn-outline-info edit-wilayah-btn"
-                                            data-bs-toggle="modal" data-bs-target="#editWilayahModal"
-                                            data-id="<?= htmlspecialchars($wilayah['id']) ?>"
-                                            data-name="<?= htmlspecialchars($wilayah['region_name']) ?>"
-                                            title="Edit Wilayah">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    <form action="" method="POST" class="d-inline" onsubmit="return confirm('Anda yakin ingin menghapus wilayah ini?')">
-                                        <input type="hidden" name="action" value="delete_wilayah">
-                                        <input type="hidden" name="id" value="<?= htmlspecialchars($wilayah['id']) ?>">
-                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Hapus Wilayah"><i class="fas fa-trash"></i></button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
+                        <div class="mb-3">
+                            <label for="nama_wilayah" class="form-label">Nama Wilayah</label>
+                            <input type="text" class="form-control" id="nama_wilayah" name="nama_wilayah" value="<?php echo htmlspecialchars($wilayah_to_edit['nama_wilayah'] ?? ''); ?>" required autofocus>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-2"></i>Simpan
+                        </button>
+                        <?php if ($action === 'edit'): ?>
+                            <a href="?page=wilayah" class="btn btn-secondary">Batal</a>
+                        <?php endif; ?>
+                    </form>
+                </div>
             </div>
         </div>
-    </div>
-</div>
 
-<!-- Modal Edit Wilayah -->
-<div class="modal fade" id="editWilayahModal" tabindex="-1" aria-labelledby="editWilayahModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="editWilayahModalLabel">Edit Wilayah</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form action="" method="POST">
-                <div class="modal-body">
-                    <input type="hidden" name="action" value="edit_wilayah">
-                    <input type="hidden" name="wilayah_id" id="edit-wilayah-id">
-                    <div class="mb-3">
-                        <label for="edit_nama_wilayah" class="form-label">Nama Wilayah</label>
-                        <input type="text" name="edit_nama_wilayah" id="edit-nama-wilayah" class="form-control" required>
+        <!-- Kolom Tabel Daftar Wilayah -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-list me-2"></i>Daftar Wilayah</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-bordered">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th scope="col">#</th>
+                                    <th scope="col">Nama Wilayah</th>
+                                    <th scope="col" style="width: 15%;">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php
+                                try {
+                                    $stmt = $pdo->query("SELECT * FROM wilayah ORDER BY nama_wilayah ASC");
+                                    $wilayah_list = $stmt->fetchAll();
+                                    $no = 1;
+                                    if (count($wilayah_list) > 0) {
+                                        foreach ($wilayah_list as $wilayah) {
+                                            echo '<tr>';
+                                            echo '<td>' . $no++ . '</td>';
+                                            echo '<td>' . htmlspecialchars($wilayah['nama_wilayah']) . '</td>';
+                                            echo '<td>';
+                                            echo '<a href="?page=wilayah&action=edit&id=' . $wilayah['id'] . '" class="btn btn-sm btn-warning me-1" title="Edit"><i class="fas fa-edit"></i></a>';
+                                            echo '<a href="?page=wilayah&action=delete&id=' . $wilayah['id'] . '" class="btn btn-sm btn-danger" title="Hapus" onclick="return confirm(\'Apakah Anda yakin ingin menghapus wilayah ini?\')"><i class="fas fa-trash"></i></a>';
+                                            echo '</td>';
+                                            echo '</tr>';
+                                        }
+                                    } else {
+                                        echo '<tr><td colspan="3" class="text-center">Belum ada data wilayah.</td></tr>';
+                                    }
+                                } catch (PDOException $e) {
+                                    echo '<tr><td colspan="3" class="text-center text-danger">Gagal memuat data: ' . $e->getMessage() . '</td></tr>';
+                                }
+                                ?>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-                    <button type="submit" class="btn btn-primary">Simpan Perubahan</button>
-                </div>
-            </form>
+            </div>
         </div>
     </div>
 </div>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const editWilayahModal = document.getElementById('editWilayahModal');
-    if (editWilayahModal) {
-        editWilayahModal.addEventListener('show.bs.modal', function (event) {
-            const button = event.relatedTarget;
-            const wilayahId = button.getAttribute('data-id');
-            const wilayahName = button.getAttribute('data-name');
-
-            editWilayahModal.querySelector('#edit-wilayah-id').value = wilayahId;
-            editWilayahModal.querySelector('#edit-nama-wilayah').value = wilayahName;
-        });
-    }
-});
-</script>

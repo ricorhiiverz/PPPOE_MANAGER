@@ -1,250 +1,255 @@
 <?php
-// Pastikan hanya teknisi yang bisa mengakses halaman ini
-if ($_SESSION['role'] !== 'teknisi') {
-    echo '<div class="alert alert-danger">Akses ditolak. Halaman ini hanya untuk teknisi.</div>';
-    return; // Hentikan eksekusi script jika bukan teknisi
+/**
+ * Halaman Manajemen Laporan Gangguan (Trouble Ticket).
+ *
+ * Mengelola semua laporan gangguan dari pelanggan.
+ *
+ * @package PPPOE_MANAGER
+ */
+
+// Keamanan: Pastikan hanya admin yang bisa mengakses halaman ini.
+if ($_SESSION['level'] !== 'admin') {
+    echo '<div class="alert alert-danger">Anda tidak memiliki izin untuk mengakses halaman ini.</div>';
+    return;
 }
 
-// Data yang dibutuhkan akan diambil di index.php
-// $reports
-?>
+// Inisialisasi variabel
+$action = $_GET['action'] ?? 'list';
+$gangguan_id = $_GET['id'] ?? null;
+$error_message = '';
+$success_message = '';
 
-<div class="card shadow-sm">
-    <div class="card-header">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <h5 class="card-title mb-0 text-white">Laporan Gangguan Saya</h5>
-            <form action="" method="GET" class="row g-2 align-items-center flex-grow-1 justify-content-end">
-                <input type="hidden" name="page" value="gangguan">
-                <div class="col-lg-4 col-md-6 col-sm-12">
-                    <label for="search_report" class="visually-hidden">Cari Pelanggan/Deskripsi</label>
-                    <div class="input-group input-group-sm">
-                        <input type="search" id="search_report" name="search_report" class="form-control" placeholder="Cari pelanggan/deskripsi..." value="<?= htmlspecialchars($search_report ?? '') ?>">
-                        <button class="btn btn-primary" type="submit" title="Cari"><i class="fas fa-search"></i></button>
+// --- Logika untuk Memproses Form (Tambah/Edit) ---
+if ($action === 'save') {
+    $id_to_update = $_POST['id'] ?? null;
+    $pelanggan_id = $_POST['pelanggan_id'];
+    $teknisi_id = !empty($_POST['teknisi_id']) ? $_POST['teknisi_id'] : null;
+    $jenis_gangguan = trim($_POST['jenis_gangguan']);
+    $deskripsi = trim($_POST['deskripsi']);
+    $status_gangguan = $_POST['status_gangguan'];
+    $tanggal_laporan = $_POST['tanggal_laporan'];
+    $tanggal_selesai = !empty($_POST['tanggal_selesai']) ? $_POST['tanggal_selesai'] : null;
+
+    if (empty($pelanggan_id) || empty($jenis_gangguan)) {
+        $error_message = 'Pelanggan dan Jenis Gangguan wajib diisi.';
+    } else {
+        try {
+            if ($id_to_update) {
+                // Proses UPDATE
+                $stmt = $pdo->prepare("UPDATE gangguan SET pelanggan_id=?, teknisi_id=?, jenis_gangguan=?, deskripsi=?, status_gangguan=?, tanggal_laporan=?, tanggal_selesai=? WHERE id=?");
+                $stmt->execute([$pelanggan_id, $teknisi_id, $jenis_gangguan, $deskripsi, $status_gangguan, $tanggal_laporan, $tanggal_selesai, $id_to_update]);
+                $success_message = 'Laporan gangguan berhasil diperbarui.';
+            } else {
+                // Proses INSERT
+                $stmt = $pdo->prepare("INSERT INTO gangguan (pelanggan_id, teknisi_id, jenis_gangguan, deskripsi, status_gangguan, tanggal_laporan, tanggal_selesai) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $stmt->execute([$pelanggan_id, $teknisi_id, $jenis_gangguan, $deskripsi, $status_gangguan, $tanggal_laporan, $tanggal_selesai]);
+                $success_message = 'Laporan gangguan baru berhasil ditambahkan.';
+            }
+            $action = 'list';
+        } catch (PDOException $e) {
+            $error_message = 'Operasi Gagal: ' . $e->getMessage();
+        }
+    }
+}
+
+// --- Logika untuk Menghapus Data ---
+if ($action === 'delete' && $gangguan_id) {
+    try {
+        $stmt = $pdo->prepare("DELETE FROM gangguan WHERE id = ?");
+        $stmt->execute([$gangguan_id]);
+        $success_message = 'Laporan gangguan berhasil dihapus.';
+    } catch (PDOException $e) {
+        $error_message = 'Operasi Gagal: ' . $e->getMessage();
+    }
+    $action = 'list';
+}
+
+// --- Tampilkan Halaman Berdasarkan Aksi ---
+switch ($action) {
+    case 'add':
+    case 'edit':
+        $gangguan = null;
+        if ($action === 'edit' && $gangguan_id) {
+            $stmt = $pdo->prepare("SELECT * FROM gangguan WHERE id = ?");
+            $stmt->execute([$gangguan_id]);
+            $gangguan = $stmt->fetch();
+        }
+        // Ambil data pelanggan dan teknisi untuk dropdown
+        $pelanggan_list = $pdo->query("SELECT id, nama_pelanggan, no_pelanggan FROM pelanggan ORDER BY nama_pelanggan ASC")->fetchAll();
+        $teknisi_list = $pdo->query("SELECT id, nama_lengkap FROM users WHERE level = 'teknisi' ORDER BY nama_lengkap ASC")->fetchAll();
+        
+        display_gangguan_form($gangguan, $pelanggan_list, $teknisi_list, $action, $error_message);
+        break;
+    
+    case 'list':
+    default:
+        $filter_status = $_GET['filter_status'] ?? '';
+        $sql = "
+            SELECT g.*, p.nama_pelanggan, u.nama_lengkap as nama_teknisi
+            FROM gangguan g
+            JOIN pelanggan p ON g.pelanggan_id = p.id
+            LEFT JOIN users u ON g.teknisi_id = u.id
+        ";
+        $params = [];
+        if (!empty($filter_status)) {
+            $sql .= " WHERE g.status_gangguan = ?";
+            $params[] = $filter_status;
+        }
+        $sql .= " ORDER BY g.tanggal_laporan DESC";
+        
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $gangguan_list = $stmt->fetchAll();
+
+        display_gangguan_table($gangguan_list, $filter_status, $error_message, $success_message);
+        break;
+}
+
+// --- Fungsi Tampilan ---
+function display_gangguan_form($gangguan, $pelanggan_list, $teknisi_list, $action, $error) {
+    ?>
+    <?php if ($error): ?>
+        <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
+    <?php endif; ?>
+    <div class="card">
+        <div class="card-header">
+            <h5><i class="fas fa-tools me-2"></i><?php echo $action === 'edit' ? 'Edit Laporan Gangguan' : 'Buat Laporan Baru'; ?></h5>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="?page=gangguan&action=save">
+                <?php if ($action === 'edit' && $gangguan): ?>
+                    <input type="hidden" name="id" value="<?php echo htmlspecialchars($gangguan['id']); ?>">
+                <?php endif; ?>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="pelanggan_id" class="form-label">Pelanggan</label>
+                            <select class="form-select" id="pelanggan_id" name="pelanggan_id" required>
+                                <option value="">-- Pilih Pelanggan --</option>
+                                <?php foreach ($pelanggan_list as $pelanggan): ?>
+                                    <option value="<?php echo $pelanggan['id']; ?>" <?php echo (isset($gangguan) && $gangguan['pelanggan_id'] == $pelanggan['id']) ? 'selected' : ''; ?>>
+                                        <?php echo htmlspecialchars($pelanggan['nama_pelanggan']) . ' (' . htmlspecialchars($pelanggan['no_pelanggan']) . ')'; ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="jenis_gangguan" class="form-label">Jenis Gangguan</label>
+                            <input type="text" class="form-control" id="jenis_gangguan" name="jenis_gangguan" value="<?php echo htmlspecialchars($gangguan['jenis_gangguan'] ?? ''); ?>" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="deskripsi" class="form-label">Deskripsi Lengkap</label>
+                            <textarea class="form-control" id="deskripsi" name="deskripsi" rows="4"><?php echo htmlspecialchars($gangguan['deskripsi'] ?? ''); ?></textarea>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="teknisi_id" class="form-label">Ditugaskan ke Teknisi</label>
+                            <select class="form-select" id="teknisi_id" name="teknisi_id">
+                                <option value="">-- Belum Ditugaskan --</option>
+                                <?php foreach ($teknisi_list as $teknisi): ?>
+                                    <option value="<?php echo $teknisi['id']; ?>" <?php echo (isset($gangguan) && $gangguan['teknisi_id'] == $teknisi['id']) ? 'selected' : ''; ?>>
+                                        <?php echo htmlspecialchars($teknisi['nama_lengkap']); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="status_gangguan" class="form-label">Status</label>
+                            <select class="form-select" id="status_gangguan" name="status_gangguan" required>
+                                <option value="terbuka" <?php echo (isset($gangguan) && $gangguan['status_gangguan'] == 'terbuka') ? 'selected' : ''; ?>>Terbuka</option>
+                                <option value="dalam pengerjaan" <?php echo (isset($gangguan) && $gangguan['status_gangguan'] == 'dalam pengerjaan') ? 'selected' : ''; ?>>Dalam Pengerjaan</option>
+                                <option value="selesai" <?php echo (isset($gangguan) && $gangguan['status_gangguan'] == 'selesai') ? 'selected' : ''; ?>>Selesai</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="tanggal_laporan" class="form-label">Tanggal Laporan</label>
+                            <input type="datetime-local" class="form-control" id="tanggal_laporan" name="tanggal_laporan" value="<?php echo htmlspecialchars($gangguan['tanggal_laporan'] ?? date('Y-m-d\TH:i')); ?>" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="tanggal_selesai" class="form-label">Tanggal Selesai</label>
+                            <input type="datetime-local" class="form-control" id="tanggal_selesai" name="tanggal_selesai" value="<?php echo htmlspecialchars($gangguan['tanggal_selesai'] ?? ''); ?>">
+                        </div>
                     </div>
                 </div>
-                <div class="col-lg-3 col-md-6 col-sm-6">
-                    <label for="report_status_filter" class="visually-hidden">Filter Status</label>
-                    <select id="report_status_filter" name="status" class="form-select form-select-sm" onchange="this.form.submit()">
-                        <option value="all" <?= ($report_status_filter ?? 'all') === 'all' ? 'selected' : '' ?>>Semua Status</option>
-                        <option value="Pending" <?= ($report_status_filter ?? '') === 'Pending' ? 'selected' : '' ?>>Pending</option>
-                        <option value="In Progress" <?= ($report_status_filter ?? '') === 'In Progress' ? 'selected' : '' ?>>Dalam Proses</option>
-                        <option value="Resolved" <?= ($report_status_filter ?? '') === 'Resolved' ? 'selected' : '' ?>>Selesai</option>
-                        <option value="Cancelled" <?= ($report_status_filter ?? '') === 'Cancelled' ? 'selected' : '' ?>>Dibatalkan</option>
+                <div class="d-flex justify-content-end mt-3">
+                    <a href="?page=gangguan" class="btn btn-secondary me-2">Batal</a>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i>Simpan Laporan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <?php
+}
+
+function display_gangguan_table($list, $filter_status, $error, $success) {
+    ?>
+    <?php if ($success): ?><div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div><?php endif; ?>
+    <?php if ($error): ?><div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div><?php endif; ?>
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5><i class="fas fa-tools me-2"></i>Daftar Laporan Gangguan</h5>
+            <a href="?page=gangguan&action=add" class="btn btn-primary"><i class="fas fa-plus me-2"></i>Buat Laporan</a>
+        </div>
+        <div class="card-body">
+            <form method="GET" action="main_view.php" class="row g-3 mb-4">
+                <input type="hidden" name="page" value="gangguan">
+                <div class="col-md-4">
+                    <label for="filter_status" class="form-label">Filter Status</label>
+                    <select id="filter_status" name="filter_status" class="form-select">
+                        <option value="">Semua Status</option>
+                        <option value="terbuka" <?php echo ($filter_status === 'terbuka') ? 'selected' : ''; ?>>Terbuka</option>
+                        <option value="dalam pengerjaan" <?php echo ($filter_status === 'dalam pengerjaan') ? 'selected' : ''; ?>>Dalam Pengerjaan</option>
+                        <option value="selesai" <?php echo ($filter_status === 'selesai') ? 'selected' : ''; ?>>Selesai</option>
                     </select>
                 </div>
-                <div class="col-lg-2 col-md-6 col-sm-6 d-flex align-items-end">
-                    <?php if (!empty($search_report) || ($report_status_filter ?? 'all') !== 'all'): ?>
-                        <a href="?page=gangguan" class="btn btn-outline-secondary btn-sm w-100" title="Reset Filter"><i class="fas fa-times"></i> Reset</a>
-                    <?php else: ?>
-                        <button type="submit" class="btn btn-primary btn-sm w-100" title="Terapkan Filter"><i class="fas fa-filter"></i> Filter</button>
-                    <?php endif; ?>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-info"><i class="fas fa-filter me-2"></i>Filter</button>
                 </div>
             </form>
-        </div>
-    </div>
-    <div class="card-body">
-        <!-- Tabel Laporan -->
-        <div class="table-responsive">
-            <table class="table table-hover align-middle">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Pelanggan</th>
-                        <th>Deskripsi Gangguan</th>
-                        <th>Status</th>
-                        <th>Dilaporkan Oleh</th>
-                        <th>Tanggal Lapor</th>
-                        <th class="text-center">Aksi</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if (empty($reports)): ?>
-                        <tr><td colspan="7" class="text-center text-muted py-5">Tidak ada laporan gangguan untuk ditampilkan.</td></tr>
-                    <?php endif; ?>
-                    <?php foreach ($reports as $report): 
-                        // Decode assigned_to from JSON string for display
-                        $assigned_to_display = json_decode($report['assigned_to'] ?? '[]', true);
-                        // For technicians page, we don't have $technicians array here to map full names.
-                        // So, we'll display usernames for now.
-                        $assigned_to_text_display = empty($assigned_to_display) ? 'Belum Ditugaskan' : implode(', ', $assigned_to_display);
-                    ?>
-                    <tr>
-                        <td><?= $report['id'] ?></td>
-                        <td class="fw-bold"><?= htmlspecialchars($report['customer_username']) ?></td>
-                        <td><?= htmlspecialchars(substr($report['issue_description'], 0, 50)) . (strlen($report['issue_description']) > 50 ? '...' : '') ?></td>
-                        <td>
-                            <?php 
-                                $status = $report['report_status'];
-                                $badge_class = 'secondary';
-                                if ($status === 'Pending') $badge_class = 'warning';
-                                elseif ($status === 'In Progress') $badge_class = 'info';
-                                elseif ($status === 'Resolved') $badge_class = 'success';
-                                elseif ($status === 'Cancelled') $badge_class = 'danger';
-                            ?>
-                            <span class="badge text-bg-<?= $badge_class ?>"><?= htmlspecialchars($status) ?></span>
-                        </td>
-                        <td><?= htmlspecialchars($report['reported_by']) ?></td>
-                        <td><?= date('d M Y H:i', strtotime($report['created_at'])) ?></td>
-                        <td class="text-center">
-                            <div class="btn-group">
-                                <button type="button" class="btn btn-sm btn-outline-primary view-report-btn"
-                                        data-bs-toggle="modal" data-bs-target="#viewReportModal"
-                                        data-id="<?= $report['id'] ?>"
-                                        data-customer="<?= htmlspecialchars($report['customer_username']) ?>"
-                                        data-description="<?= htmlspecialchars($report['issue_description']) ?>"
-                                        data-status="<?= htmlspecialchars($report['report_status']) ?>"
-                                        data-reported-by="<?= htmlspecialchars($report['reported_by']) ?>"
-                                        data-assigned-to='<?= htmlspecialchars($report['assigned_to'] ?? '[]') ?>'
-                                        data-created-at="<?= htmlspecialchars(date('d M Y H:i', strtotime($report['created_at']))) ?>"
-                                        data-updated-at="<?= htmlspecialchars(date('d M Y H:i', strtotime($report['updated_at']))) ?>"
-                                        data-resolved-at="<?= htmlspecialchars($report['resolved_at'] ? date('d M Y H:i', strtotime($report['resolved_at'])) : 'N/A') ?>"
-                                        title="Lihat Detail">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                                <?php if ($report['report_status'] !== 'Resolved' && $report['report_status'] !== 'Cancelled'): ?>
-                                <button type="button" class="btn btn-sm btn-outline-success update-status-btn"
-                                        data-bs-toggle="modal" data-bs-target="#updateStatusModal"
-                                        data-id="<?= $report['id'] ?>"
-                                        data-customer="<?= htmlspecialchars($report['customer_username']) ?>"
-                                        data-status="<?= htmlspecialchars($report['report_status']) ?>"
-                                        title="Perbarui Status">
-                                    <i class="fas fa-check-circle"></i>
-                                </button>
-                                <?php endif; ?>
-                            </div>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
-
-<!-- Modal Perbarui Status Laporan (Untuk Teknisi) -->
-<div class="modal fade" id="updateStatusModal" tabindex="-1" aria-labelledby="updateStatusModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="updateStatusModalLabel">Perbarui Status Laporan</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form action="" method="POST">
-                <div class="modal-body">
-                    <input type="hidden" name="action" value="update_report_status">
-                    <input type="hidden" name="report_id" id="update_report_id">
-                    <p>Perbarui status laporan untuk pelanggan: <strong id="update_customer_username"></strong></p>
-                    <div class="mb-3">
-                        <label for="new_status" class="form-label">Status Baru</label>
-                        <select name="new_status" id="new_status" class="form-select" required>
-                            <option value="Pending">Pending</option>
-                            <option value="In Progress">Dalam Proses</option>
-                            <option value="Resolved">Selesai</option>
-                            <option value="Cancelled">Dibatalkan</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-                    <button type="submit" class="btn btn-primary">Simpan Perubahan</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Modal Lihat Detail Laporan (Sama dengan Admin, bisa di-reuse atau duplikasi jika perlu perbedaan) -->
-<div class="modal fade" id="viewReportModal" tabindex="-1" aria-labelledby="viewReportModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="viewReportModalLabel">Detail Laporan Gangguan</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <dl class="row">
-                    <dt class="col-sm-4">ID Laporan:</dt>
-                    <dd class="col-sm-8" id="view_report_id"></dd>
-
-                    <dt class="col-sm-4">Username Pelanggan:</dt>
-                    <dd class="col-sm-8" id="view_customer_username"></dd>
-
-                    <dt class="col-sm-4">Deskripsi Gangguan:</dt>
-                    <dd class="col-sm-8" id="view_issue_description"></dd>
-
-                    <dt class="col-sm-4">Status:</dt>
-                    <dd class="col-sm-8" id="view_report_status"></dd>
-
-                    <dt class="col-sm-4">Dilaporkan Oleh:</dt>
-                    <dd class="col-sm-8" id="view_reported_by"></dd>
-
-                    <dt class="col-sm-4">Ditugaskan Kepada:</dt>
-                    <dd class="col-sm-8" id="view_assigned_to"></dd>
-
-                    <dt class="col-sm-4">Tanggal Lapor:</dt>
-                    <dd class="col-sm-8" id="view_created_at"></dd>
-
-                    <dt class="col-sm-4">Terakhir Diperbarui:</dt>
-                    <dd class="col-sm-8" id="view_updated_at"></dd>
-
-                    <dt class="col-sm-4">Tanggal Selesai:</dt>
-                    <dd class="col-sm-8" id="view_resolved_at"></dd>
-                </dl>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+            <div class="table-responsive">
+                <table class="table table-striped table-bordered table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Pelanggan</th>
+                            <th>Jenis Gangguan</th>
+                            <th>Teknisi</th>
+                            <th>Tgl Laporan</th>
+                            <th>Status</th>
+                            <th style="width: 15%;">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (count($list) > 0): ?>
+                            <?php foreach ($list as $item): ?>
+                                <tr>
+                                    <td><?php echo htmlspecialchars($item['nama_pelanggan']); ?></td>
+                                    <td><?php echo htmlspecialchars($item['jenis_gangguan']); ?></td>
+                                    <td><?php echo htmlspecialchars($item['nama_teknisi'] ?? 'N/A'); ?></td>
+                                    <td><?php echo date('d M Y, H:i', strtotime($item['tanggal_laporan'])); ?></td>
+                                    <td>
+                                        <?php 
+                                        $status_class = 'bg-secondary';
+                                        if ($item['status_gangguan'] == 'selesai') $status_class = 'bg-success';
+                                        if ($item['status_gangguan'] == 'terbuka') $status_class = 'bg-danger';
+                                        if ($item['status_gangguan'] == 'dalam pengerjaan') $status_class = 'bg-warning text-dark';
+                                        ?>
+                                        <span class="badge <?php echo $status_class; ?>"><?php echo ucfirst($item['status_gangguan']); ?></span>
+                                    </td>
+                                    <td>
+                                        <a href="?page=gangguan&action=edit&id=<?php echo $item['id']; ?>" class="btn btn-sm btn-warning" title="Edit"><i class="fas fa-edit"></i></a>
+                                        <a href="?page=gangguan&action=delete&id=<?php echo $item['id']; ?>" class="btn btn-sm btn-danger" title="Hapus" onclick="return confirm('Anda yakin ingin menghapus laporan ini?')"><i class="fas fa-trash"></i></a>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <tr><td colspan="6" class="text-center">Tidak ada data laporan gangguan untuk filter yang dipilih.</td></tr>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
-</div>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Modal Perbarui Status Laporan
-    const updateStatusModal = document.getElementById('updateStatusModal');
-    if (updateStatusModal) {
-        updateStatusModal.addEventListener('show.bs.modal', function (event) {
-            const button = event.relatedTarget;
-            const reportId = button.getAttribute('data-id');
-            const customerUsername = button.getAttribute('data-customer');
-            const currentStatus = button.getAttribute('data-status');
-
-            updateStatusModal.querySelector('#update_report_id').value = reportId;
-            updateStatusModal.querySelector('#update_customer_username').innerText = customerUsername;
-            updateStatusModal.querySelector('#new_status').value = currentStatus;
-        });
-    }
-
-    // Modal Lihat Detail Laporan (Sama dengan di pages/laporan.php)
-    const viewReportModal = document.getElementById('viewReportModal');
-    if (viewReportModal) {
-        viewReportModal.addEventListener('show.bs.modal', function (event) {
-            const button = event.relatedTarget;
-            const assignedToJson = button.getAttribute('data-assigned-to');
-            const assignedTo = JSON.parse(assignedToJson || '[]');
-            
-            // Map usernames to full names for display in modal
-            let assignedToDisplay = [];
-            if (assignedTo.length > 0) {
-                // In a real application, you would pass the technicians array to JS
-                // or make an AJAX call to get full names. For now, just display usernames.
-                // For this migration, the $technicians array is NOT available in this page's scope.
-                // So, we'll just display usernames here.
-                assignedToDisplay = assignedTo.map(username => username); 
-            } else {
-                assignedToDisplay.push('Belum Ditugaskan');
-            }
-
-            viewReportModal.querySelector('#view_report_id').innerText = button.getAttribute('data-id');
-            viewReportModal.querySelector('#view_customer_username').innerText = button.getAttribute('data-customer');
-            viewReportModal.querySelector('#view_issue_description').innerText = button.getAttribute('data-description');
-            viewReportModal.querySelector('#view_report_status').innerText = button.getAttribute('data-status');
-            viewReportModal.querySelector('#view_reported_by').innerText = button.getAttribute('data-reported-by');
-            viewReportModal.querySelector('#view_assigned_to').innerText = assignedToDisplay.join(', '); // Join multiple names
-            viewReportModal.querySelector('#view_created_at').innerText = button.getAttribute('data-created-at');
-            viewReportModal.querySelector('#view_updated_at').innerText = button.getAttribute('data-updated-at');
-            viewReportModal.querySelector('#view_resolved_at').innerText = button.getAttribute('data-resolved-at');
-        });
-    }
-});
-</script>
+    <?php
+}
+?>

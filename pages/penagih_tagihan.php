@@ -1,191 +1,187 @@
 <?php
-// Pastikan hanya penagih yang bisa mengakses
-if ($_SESSION['role'] !== 'penagih') {
-    echo '<div class="alert alert-danger">Akses ditolak. Halaman ini hanya untuk penagih.</div>';
+/**
+ * Halaman Daftar Tagihan untuk Penagih.
+ *
+ * Menampilkan daftar pelanggan yang memiliki tunggakan,
+ * dikelompokkan per wilayah untuk efisiensi kerja.
+ *
+ * @package PPPOE_MANAGER
+ */
+
+// Keamanan: Pastikan hanya penagih atau admin yang bisa mengakses halaman ini.
+if (!in_array($_SESSION['level'], ['penagih', 'admin'])) {
+    echo '<div class="alert alert-danger">Anda tidak memiliki izin untuk mengakses halaman ini.</div>';
     return;
 }
 
-// Bangun query string untuk link ekspor berdasarkan filter saat ini
-// Catatan: Export untuk penagih akan otomatis difilter berdasarkan wilayah yang ditugaskan di index.php
-$export_query_params = http_build_query([
-    'action' => 'export_invoices',
-    'search_user' => $search_user ?? '',
-    'filter_month' => $filter_month ?? '',
-    'filter_status' => $filter_status ?? 'all',
-    'filter_by_user' => $filter_by_user ?? 'all'
-]);
+// Inisialisasi variabel
+$error_message = '';
+$success_message = '';
+
+// --- Logika untuk Update Status Lunas ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_status') {
+    $tagihan_id = $_POST['tagihan_id'] ?? null;
+    if ($tagihan_id) {
+        try {
+            $dibayar_oleh = $_SESSION['nama_lengkap']; // Ambil nama penagih yang login
+            $stmt_update = $pdo->prepare("UPDATE tagihan SET status_pembayaran = 'lunas', metode_pembayaran = 'Tunai', tanggal_pembayaran = NOW(), dibayar_oleh = ? WHERE id = ?");
+            $stmt_update->execute([$dibayar_oleh, $tagihan_id]);
+
+            if ($stmt_update->rowCount() > 0) {
+                $success_message = "Tagihan berhasil ditandai lunas.";
+
+                // REVISI: Kirim notifikasi WhatsApp
+                try {
+                    $stmt_pelanggan = $pdo->prepare("
+                        SELECT p.no_hp, p.nama_pelanggan, t.jumlah_tagihan, t.bulan_tagihan
+                        FROM tagihan t JOIN pelanggan p ON t.pelanggan_id = p.id WHERE t.id = ?
+                    ");
+                    $stmt_pelanggan->execute([$tagihan_id]);
+                    $pelanggan = $stmt_pelanggan->fetch();
+
+                    if ($pelanggan && !empty($pelanggan['no_hp'])) {
+                        $nama_isp = $app_settings['nama_isp'] ?? 'Kami';
+                        $pesan = "Yth. Bpk/Ibu " . $pelanggan['nama_pelanggan'] . ",\n\n" .
+                                 "Kami memberitahukan bahwa pembayaran tagihan internet Anda untuk bulan " . date('F Y', strtotime($pelanggan['bulan_tagihan'])) . " sebesar Rp " . number_format($pelanggan['jumlah_tagihan']) . " telah kami terima melalui petugas kami.\n\n" .
+                                 "Terima kasih atas pembayarannya.\n" . $nama_isp;
+                        
+                        if (!send_whatsapp_notification($app_settings, $pelanggan['no_hp'], $pesan)) {
+                            $error_message = "Peringatan: Tagihan berhasil diupdate, namun notifikasi WhatsApp gagal terkirim.";
+                        }
+                    }
+                } catch (Exception $e) {
+                    $error_message = "Peringatan: Tagihan berhasil diupdate, namun notifikasi WhatsApp gagal terkirim.";
+                }
+            }
+        } catch (PDOException $e) {
+            $error_message = "Gagal memperbarui status: " . $e->getMessage();
+        }
+    }
+}
+
+// --- Logika untuk Menampilkan Daftar Tagihan (dengan filter) ---
+$filter_bulan = $_GET['filter_bulan'] ?? date('Y-m');
+$filter_wilayah = $_GET['filter_wilayah'] ?? '';
+
+// Ambil daftar wilayah untuk dropdown filter
+try {
+    $wilayah_list = $pdo->query("SELECT id, nama_wilayah FROM wilayah ORDER BY nama_wilayah ASC")->fetchAll();
+} catch (PDOException $e) {
+    $wilayah_list = [];
+}
+
+// Query utama untuk mengambil data tunggakan
+$sql = "
+    SELECT t.*, p.nama_pelanggan, p.no_pelanggan, p.alamat, p.no_hp, w.nama_wilayah
+    FROM tagihan t
+    JOIN pelanggan p ON t.pelanggan_id = p.id
+    LEFT JOIN wilayah w ON p.wilayah_id = w.id
+    WHERE t.status_pembayaran = 'belum lunas' AND t.bulan_tagihan = ?
+";
+$params = [$filter_bulan];
+
+if (!empty($filter_wilayah)) {
+    $sql .= " AND p.wilayah_id = ?";
+    $params[] = $filter_wilayah;
+}
+$sql .= " ORDER BY w.nama_wilayah, p.nama_pelanggan ASC";
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
+$tunggakan_list = $stmt->fetchAll();
+
+// Kelompokkan hasil berdasarkan wilayah
+$tunggakan_by_wilayah = [];
+foreach ($tunggakan_list as $tunggakan) {
+    $nama_wilayah = $tunggakan['nama_wilayah'] ?? 'Tanpa Wilayah';
+    $tunggakan_by_wilayah[$nama_wilayah][] = $tunggakan;
+}
 
 ?>
 
-<div class="card shadow-sm">
-    <div class="card-header">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <h5 class="card-title mb-0 text-white">Manajemen Tagihan Saya</h5>
-            <div class="d-flex flex-wrap gap-2">
-                <!-- Tombol Generate Tagihan hanya untuk Admin -->
-                <a href="index.php?<?= $export_query_params ?>" class="btn btn-info btn-sm">
-                    <i class="fas fa-file-csv me-2"></i>Ekspor ke CSV
-                </a>
-            </div>
-        </div>
-    </div>
-    <div class="card-body">
-        <!-- Filter Form -->
-        <form action="" method="GET" class="row g-2 align-items-center mb-4">
-            <input type="hidden" name="page" value="penagih_tagihan">
-            <div class="col-lg-3 col-md-6 col-sm-12">
-                <label for="search_user" class="visually-hidden">Cari Username</label>
-                <div class="input-group input-group-sm">
-                    <input type="search" id="search_user" name="search_user" class="form-control" placeholder="Cari username..." value="<?= htmlspecialchars($search_user ?? '') ?>">
-                    <button class="btn btn-primary" type="submit" title="Cari"><i class="fas fa-search"></i></button>
-                </div>
-            </div>
-            <div class="col-lg-2 col-md-6 col-sm-6">
-                <label for="filter_month" class="visually-hidden">Filter Bulan</label>
-                <input type="month" id="filter_month" name="filter_month" class="form-control form-control-sm" value="<?= htmlspecialchars($filter_month ?? '') ?>" onchange="this.form.submit()">
-            </div>
-            <div class="col-lg-2 col-md-4 col-sm-6">
-                <label for="filter_status" class="visually-hidden">Status</label>
-                <select id="filter_status" name="filter_status" class="form-select form-select-sm" onchange="this.form.submit()">
-                    <option value="all" <?= ($filter_status ?? 'all') === 'all' ? 'selected' : '' ?>>Semua Status</option>
-                    <option value="Belum Lunas" <?= ($filter_status ?? '') === 'Belum Lunas' ? 'selected' : '' ?>>Belum Lunas</option>
-                    <option value="Lunas" <?= ($filter_status ?? '') === 'Lunas' ? 'selected' : '' ?>>Lunas</option>
-                </select>
-            </div>
-            <div class="col-lg-2 col-md-4 col-sm-6">
-                <label for="filter_by_user" class="visually-hidden">Dikonfirmasi Oleh</label>
-                <select id="filter_by_user" name="filter_by_user" class="form-select form-select-sm" onchange="this.form.submit()">
-                    <option value="all">Semua User</option>
-                    <?php foreach ($confirmation_users as $user): ?>
-                        <option value="<?= htmlspecialchars($user) ?>" <?= ($filter_by_user ?? '') === $user ? 'selected' : '' ?>><?= htmlspecialchars($user) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col-lg-1 col-md-4 col-sm-6 d-flex align-items-end">
-                <?php if (!empty($search_user) || !empty($filter_month) || ($filter_status ?? 'all') !== 'all' || ($filter_by_user ?? 'all') !== 'all'): ?>
-                    <a href="?page=penagih_tagihan" class="btn btn-outline-secondary btn-sm w-100" title="Reset Filter"><i class="fas fa-times"></i> Reset</a>
-                <?php else: ?>
-                    <button type="submit" class="btn btn-primary btn-sm w-100" title="Terapkan Filter"><i class="fas fa-filter"></i> Filter</button>
-                <?php endif; ?>
-            </div>
-        </form>
+<div class="container-fluid">
+    <?php if ($success_message): ?><div class="alert alert-success"><?php echo htmlspecialchars($success_message); ?></div><?php endif; ?>
+    <?php if ($error_message): ?><div class="alert alert-danger"><?php echo htmlspecialchars($error_message); ?></div><?php endif; ?>
 
-        <!-- Ringkasan Tagihan -->
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <div class="card bg-success text-white">
-                    <div class="card-body">
-                        <h6 class="card-title">Total Lunas (Sesuai Filter)</h6>
-                        <p class="card-text fs-4 fw-bold">Rp <?= number_format($total_lunas ?? 0, 0, ',', '.') ?></p>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card bg-warning text-dark">
-                    <div class="card-body">
-                        <h6 class="card-title">Total Belum Lunas (Sesuai Filter)</h6>
-                        <p class="card-text fs-4 fw-bold">Rp <?= number_format($total_belum_lunas ?? 0, 0, ',', '.') ?></p>
-                    </div>
-                </div>
-            </div>
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-list-ul me-2"></i>Daftar Penagihan (Belum Lunas)</h5>
         </div>
+        <div class="card-body">
+            <!-- Form Filter -->
+            <form method="GET" action="main_view.php" class="row g-3 mb-4 p-3 bg-light border rounded">
+                <input type="hidden" name="page" value="penagih_tagihan">
+                <div class="col-md-5">
+                    <label for="filter_bulan" class="form-label">Tagihan Bulan</label>
+                    <input type="month" class="form-control" id="filter_bulan" name="filter_bulan" value="<?php echo htmlspecialchars($filter_bulan); ?>">
+                </div>
+                <div class="col-md-5">
+                    <label for="filter_wilayah" class="form-label">Filter Wilayah</label>
+                    <select id="filter_wilayah" name="filter_wilayah" class="form-select">
+                        <option value="">Semua Wilayah</option>
+                        <?php foreach ($wilayah_list as $wilayah): ?>
+                            <option value="<?php echo $wilayah['id']; ?>" <?php echo ($filter_wilayah == $wilayah['id']) ? 'selected' : ''; ?>>
+                                <?php echo htmlspecialchars($wilayah['nama_wilayah']); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-info w-100"><i class="fas fa-filter me-2"></i>Filter</button>
+                </div>
+            </form>
 
-        <!-- Tabel Tagihan -->
-        <div class="table-responsive">
-            <table class="table table-hover align-middle">
-                <thead>
-                    <tr>
-                        <th>Username</th>
-                        <th>Bulan</th>
-                        <th>Jumlah</th>
-                        <th>Jatuh Tempo</th>
-                        <th>Status</th>
-                        <th>VIA</th>
-                        <th>Waktu Bayar</th>
-                        <th>Dikonfirmasi Oleh</th>
-                        <th class="text-center">Aksi</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if (empty($invoices)): ?>
-                        <tr>
-                            <td colspan="9" class="text-center text-muted py-5">
-                                Tidak ada data tagihan untuk ditampilkan di wilayah Anda.
-                            </td>
-                        </tr>
-                    <?php endif; ?>
-                    <?php foreach ($invoices as $invoice): ?>
-                    <tr>
-                        <td class="fw-bold"><?= htmlspecialchars($invoice['username']) ?></td>
-                        <td><?= date('F Y', strtotime($invoice['billing_month'] . '-01')) ?></td>
-                        <td><?= number_format($invoice['amount'], 0, ',', '.') ?></td>
-                        <td><?= date('d F Y', strtotime($invoice['due_date'])) ?></td>
-                        <td>
-                            <?php if ($invoice['status'] == 'Lunas'): ?>
-                                <span class="badge text-bg-success">Lunas</span>
-                            <?php else: ?>
-                                <span class="badge text-bg-warning">Belum Lunas</span>
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <?php 
-                                $method = $invoice['payment_method'];
-                                $badge_class = 'secondary';
-                                if ($method === 'Cash') $badge_class = 'primary';
-                                if ($method === 'Online') $badge_class = 'info';
-                            ?>
-                            <span class="badge text-bg-<?= $badge_class ?>"><?= htmlspecialchars($method ?? 'N/A') ?></span>
-                        </td>
-                        <td><?= $invoice['paid_date'] ? date('d M Y, H:i', strtotime($invoice['paid_date'])) : 'N/A' ?></td>
-                        <td><span class="badge text-bg-dark"><?= htmlspecialchars($invoice['updated_by'] ?? 'N/A') ?></span></td>
-                        <td class="text-center">
-                            <?php if ($invoice['status'] == 'Belum Lunas'): ?>
-                                <button type="button" class="btn btn-sm btn-outline-success mark-paid-btn" 
-                                        data-bs-toggle="modal" 
-                                        data-bs-target="#paymentModal"
-                                        data-invoice-id="<?= $invoice['id'] ?>"
-                                        data-username="<?= htmlspecialchars($invoice['username']) ?>"
-                                        title="Tandai Lunas">
-                                    <i class="fas fa-check"></i>
+            <!-- Daftar Tagihan per Wilayah -->
+            <?php if (count($tunggakan_by_wilayah) > 0): ?>
+                <?php foreach ($tunggakan_by_wilayah as $wilayah_nama => $tunggakans): ?>
+                    <div class="accordion mb-3" id="accordion-<?php echo md5($wilayah_nama); ?>">
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="heading-<?php echo md5($wilayah_nama); ?>">
+                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<?php echo md5($wilayah_nama); ?>" aria-expanded="true" aria-controls="collapse-<?php echo md5($wilayah_nama); ?>">
+                                    <i class="fas fa-map-marker-alt me-2"></i>
+                                    <strong><?php echo htmlspecialchars($wilayah_nama); ?></strong>
+                                    <span class="badge bg-danger ms-3"><?php echo count($tunggakans); ?> Pelanggan</span>
                                 </button>
-                            <?php else: // Status is 'Lunas' ?>
-                                <span class="text-muted small">-</span>
-                            <?php endif; ?>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+                            </h2>
+                            <div id="collapse-<?php echo md5($wilayah_nama); ?>" class="accordion-collapse collapse show" aria-labelledby="heading-<?php echo md5($wilayah_nama); ?>">
+                                <div class="accordion-body p-0">
+                                    <div class="table-responsive">
+                                        <table class="table table-striped table-hover mb-0">
+                                            <tbody>
+                                                <?php foreach ($tunggakans as $tunggakan): ?>
+                                                <tr>
+                                                    <td>
+                                                        <strong><?php echo htmlspecialchars($tunggakan['nama_pelanggan']); ?></strong> (<?php echo htmlspecialchars($tunggakan['no_pelanggan']); ?>)<br>
+                                                        <small class="text-muted"><?php echo htmlspecialchars($tunggakan['alamat']); ?></small>
+                                                    </td>
+                                                    <td>
+                                                        <i class="fas fa-phone-alt me-1 text-muted"></i> <?php echo htmlspecialchars($tunggakan['no_hp']); ?>
+                                                    </td>
+                                                    <td class="text-end">
+                                                        <strong>Rp <?php echo number_format($tunggakan['jumlah_tagihan'], 0, ',', '.'); ?></strong>
+                                                    </td>
+                                                    <td class="text-center" style="width: 15%;">
+                                                        <form method="POST" action="?page=penagih_tagihan" onsubmit="return confirm('Tandai tagihan ini sebagai LUNAS?');">
+                                                            <input type="hidden" name="action" value="update_status">
+                                                            <input type="hidden" name="tagihan_id" value="<?php echo $tunggakan['id']; ?>">
+                                                            <button type="submit" class="btn btn-sm btn-success w-100">
+                                                                <i class="fas fa-check me-1"></i> Tandai Lunas
+                                                            </button>
+                                                        </form>
+                                                    </td>
+                                                </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <div class="alert alert-info text-center">Tidak ada data tunggakan untuk filter yang dipilih.</div>
+            <?php endif; ?>
         </div>
     </div>
-</div>
-
-<!-- Modal Konfirmasi Pembayaran -->
-<div class="modal fade" id="paymentModal" tabindex="-1" aria-labelledby="paymentModalLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="paymentModalLabel">Konfirmasi Pembayaran</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <form action="" method="POST">
-        <div class="modal-body">
-            <input type="hidden" name="action" value="mark_as_paid">
-            <input type="hidden" name="invoice_id" id="modal_invoice_id">
-            <p>Tandai tagihan untuk <strong id="modal_username"></strong> sebagai lunas?</p>
-            <div class="mb-3">
-                <label for="payment_method" class="form-label">Pilih Metode Pembayaran:</label>
-                <select name="payment_method" id="payment_method" class="form-select" required>
-                    <option value="Cash" selected>Cash</option>
-                    <option value="Online">Online/Transfer</option>
-                </select>
-            </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-          <button type="submit" class="btn btn-primary">Konfirmasi Pembayaran</button>
-        </div>
-      </form>
-    </div>
-  </div>
 </div>
