@@ -47,7 +47,11 @@
                 <div class="card shadow-lg">
                     <div class="card-body p-4">
                         <h3 class="text-center mb-2">Setup Admin Awal</h3>
-                        <p class="text-center text-muted mb-4">Database tidak ditemukan. Silakan buat pengguna admin pertama.</p>
+                        <?php if (isset($setup_error)): ?>
+                            <div class="alert alert-danger mb-3"><?= htmlspecialchars($setup_error) ?></div>
+                        <?php else: ?>
+                            <p class="text-center text-muted mb-4">Database belum terinisialisasi atau pengguna admin belum ada. Silakan buat pengguna admin pertama.</p>
+                        <?php endif; ?>
                         <form method="POST" action="index.php">
                             <input type="hidden" name="setup_admin" value="1">
                             <div class="mb-3">

@@ -52,7 +52,7 @@ if (!in_array($_SESSION['role'], ['admin', 'teknisi', 'penagih'])) {
                 <select id="wilayahFilter" class="form-select">
                     <option value="all">Semua Wilayah</option>
                     <?php foreach ($wilayah_list as $wilayah): ?>
-                        <option value="<?= htmlspecialchars($wilayah) ?>"><?= htmlspecialchars($wilayah) ?></option>
+                        <option value="<?= htmlspecialchars($wilayah['region_name']) ?>"><?= htmlspecialchars($wilayah['region_name']) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -77,6 +77,7 @@ if (!in_array($_SESSION['role'], ['admin', 'teknisi', 'penagih'])) {
         }).addTo(map);
 
         // Ambil data pelanggan dan wilayah dari PHP
+        // $customers_with_coords sekarang sudah diolah di index.php
         const allCustomers = <?= json_encode($customers_with_coords ?? []) ?>;
         let currentMarkers = L.featureGroup().addTo(map); // Layer grup untuk marker yang ditampilkan
 
@@ -84,7 +85,8 @@ if (!in_array($_SESSION['role'], ['admin', 'teknisi', 'penagih'])) {
         const icons = {
             Online: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] }),
             Offline: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-grey.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] }),
-            Disabled: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] })
+            Disabled: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] }),
+            'Tidak di MikroTik': L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] })
         };
 
         // Fungsi untuk memperbarui marker di peta berdasarkan filter
@@ -101,6 +103,7 @@ if (!in_array($_SESSION['role'], ['admin', 'teknisi', 'penagih'])) {
                 if (coords.length === 2 && !isNaN(coords[0]) && !isNaN(coords[1])) {
                     const [lat, lng] = coords;
                     
+                    // Gunakan status yang sudah dihitung di PHP
                     const marker = L.marker([lat, lng], { icon: icons[customer.status] });
                     marker.bindPopup(`<b>${customer.name}</b><br>Status: ${customer.status}<br>Wilayah: ${customer.wilayah || 'N/A'}`);
                     currentMarkers.addLayer(marker); // Tambahkan ke featureGroup
@@ -133,7 +136,8 @@ if (!in_array($_SESSION['role'], ['admin', 'teknisi', 'penagih'])) {
             const statuses = {
                 'Online': '#28a745', // green
                 'Offline': '#6c757d', // grey
-                'Disabled': '#dc3545' // red
+                'Disabled': '#dc3545', // red
+                'Tidak di MikroTik': '#ffc107' // orange
             };
             let legendHtml = '<h6>Status Pelanggan</h6>';
             for (const status in statuses) {

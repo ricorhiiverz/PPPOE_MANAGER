@@ -7,6 +7,10 @@ if (!in_array($_SESSION['role'], ['admin', 'teknisi', 'penagih'])) {
 
 // Akses pengaturan aplikasi global
 global $app_settings;
+// Data yang dibutuhkan akan diambil di index.php:
+// $total_customers_db, $total_active, $total_offline, $total_disabled (untuk admin dashboard)
+// $total_uang, $uang_lunas, $uang_belum_bayar, $uang_libur (untuk admin dashboard)
+// Atau versi filtered untuk penagih dashboard.
 ?>
 
 <!-- Baris 1: Ringkasan Status Pelanggan -->
@@ -16,7 +20,7 @@ global $app_settings;
             <div class="card-body d-flex align-items-center justify-content-between">
                 <div>
                     <div class="text-muted small">Total Pelanggan</div>
-                    <div class="fs-4 fw-bold"><?= $total_secrets ?? 0 ?></div>
+                    <div class="fs-4 fw-bold"><?= $total_customers_db ?? 0 ?></div>
                 </div>
                 <i class="fas fa-users fa-2x text-primary ms-3"></i>
             </div>

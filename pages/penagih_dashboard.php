@@ -6,8 +6,8 @@ if ($_SESSION['role'] !== 'penagih') {
 }
 
 // Data yang dibutuhkan akan diambil di index.php
-// $total_secrets, $total_active, $total_offline, $total_disabled
-// $total_uang, $uang_lunas, $uang_belum_bayar, $uang_libur
+// $total_customers_db, $total_active, $total_offline, $total_disabled (untuk penagih dashboard)
+// $total_uang, $uang_lunas, $uang_belum_bayar, $uang_libur (untuk penagih dashboard)
 ?>
 
 <!-- Baris 1: Ringkasan Status Pelanggan (difilter berdasarkan wilayah penagih) -->
@@ -17,7 +17,7 @@ if ($_SESSION['role'] !== 'penagih') {
             <div class="card-body d-flex align-items-center justify-content-between">
                 <div>
                     <div class="text-muted small">Total Pelanggan</div>
-                    <div class="fs-4 fw-bold"><?= $total_secrets ?? 0 ?></div>
+                    <div class="fs-4 fw-bold"><?= $total_customers_db ?? 0 ?></div>
                 </div>
                 <i class="fas fa-users fa-2x text-primary ms-3"></i>
             </div>
@@ -105,6 +105,3 @@ if ($_SESSION['role'] !== 'penagih') {
         </div>
     </div>
 </div>
-
-<!-- Anda bisa menambahkan bagian lain yang relevan untuk penagih di sini,
-     misalnya daftar tagihan yang akan jatuh tempo, atau pelanggan yang belum lunas. -->

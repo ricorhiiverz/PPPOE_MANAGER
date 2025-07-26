@@ -32,21 +32,21 @@ if ($_SESSION['role'] !== 'admin') {
                         <?php if (empty($wilayah_list)): ?>
                             <tr><td colspan="2" class="text-center text-muted py-4">Belum ada data wilayah.</td></tr>
                         <?php endif; ?>
-                        <?php foreach ($wilayah_list as $id => $wilayah): ?>
+                        <?php foreach ($wilayah_list as $wilayah): ?>
                         <tr>
-                            <td class="fw-bold"><?= htmlspecialchars($wilayah) ?></td>
+                            <td class="fw-bold"><?= htmlspecialchars($wilayah['region_name']) ?></td>
                             <td class="text-center">
                                 <div class="btn-group">
                                     <button type="button" class="btn btn-sm btn-outline-info edit-wilayah-btn"
                                             data-bs-toggle="modal" data-bs-target="#editWilayahModal"
-                                            data-id="<?= $id ?>"
-                                            data-name="<?= htmlspecialchars($wilayah) ?>"
+                                            data-id="<?= htmlspecialchars($wilayah['id']) ?>"
+                                            data-name="<?= htmlspecialchars($wilayah['region_name']) ?>"
                                             title="Edit Wilayah">
                                         <i class="fas fa-edit"></i>
                                     </button>
                                     <form action="" method="POST" class="d-inline" onsubmit="return confirm('Anda yakin ingin menghapus wilayah ini?')">
                                         <input type="hidden" name="action" value="delete_wilayah">
-                                        <input type="hidden" name="id" value="<?= $id ?>">
+                                        <input type="hidden" name="id" value="<?= htmlspecialchars($wilayah['id']) ?>">
                                         <button type="submit" class="btn btn-sm btn-outline-danger" title="Hapus Wilayah"><i class="fas fa-trash"></i></button>
                                     </form>
                                 </div>

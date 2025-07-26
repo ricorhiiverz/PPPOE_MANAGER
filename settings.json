@@ -9,5 +9,10 @@
     "tripay_production_mode": false,
     "fonnte_api_key": "2DF8LXjBVsZ#VKrvdg#d",
     "fonnte_instance_id": "",
-    "fonnte_base_url": "https:\/\/api.fonnte.com\/send"
+    "fonnte_base_url": "https:\/\/api.fonnte.com\/send",
+    "db_host": "localhost",
+    "db_name": "u409826558_web_manager",
+    "db_user": "u409826558_web_manager",
+    "db_pass": "s!P[Hb3v7H4N",
+    "db_port": 3306
 }

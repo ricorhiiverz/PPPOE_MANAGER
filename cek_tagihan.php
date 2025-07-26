@@ -19,17 +19,6 @@ function connect_db() {
     }
 }
 
-// Fungsi parse_comment_for_wa sekarang ada di config.php
-// function parse_comment_for_wa($comment) {
-//     $parts = explode('|', $comment);
-//     foreach ($parts as $part) {
-//         if (strpos($part, 'WA:') === 0) {
-//             return substr($part, 3);
-//         }
-//     }
-//     return null;
-// }
-
 // Fungsi untuk menampilkan halaman error yang user-friendly
 function display_error($message) {
     die('
@@ -66,10 +55,46 @@ function display_error($message) {
     ');
 }
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['check_bill'])) {
-    // Jika tidak ada POST request atau check_bill tidak diset, tampilkan form kosong
-    // Ini bukan error, jadi jangan panggil display_error()
-} else {
+$invoices = []; // Inisialisasi array invoices
+$error_message = '';
+$username = ''; // Inisialisasi username
+$payment_channels = []; // Inisialisasi array untuk channel pembayaran
+
+// Ambil daftar channel pembayaran dari Tripay
+$payment_channels = getTripayPaymentChannels();
+// Filter channel yang aktif dan memiliki group 'E-Wallet' atau 'Virtual Account' atau 'Retail Outlet'
+$filtered_payment_channels = [];
+foreach ($payment_channels as $channel) {
+    if ($channel['active'] && in_array($channel['group'], ['E-Wallet', 'Virtual Account', 'Retail Outlet', 'QRIS'])) {
+        $filtered_payment_channels[] = $channel;
+    }
+}
+
+
+// --- PERBAIKAN: Tangani request GET dengan parameter username 'u' ---
+if (isset($_GET['u']) && !empty($_GET['u'])) {
+    $username = trim($_GET['u']);
+    try {
+        $pdo = connect_db();
+        if ($pdo) {
+            // Ambil semua tagihan yang belum lunas untuk username ini
+            $stmt = $pdo->prepare("SELECT * FROM invoices WHERE username = ? AND status = 'Belum Lunas' ORDER BY billing_month ASC");
+            $stmt->execute([$username]);
+            $invoices = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            if (empty($invoices)) {
+                $error_message = 'Tidak ada tagihan yang belum lunas untuk pelanggan ' . htmlspecialchars($username) . '.';
+            }
+        } else {
+            $error_message = 'Gagal terhubung ke database. Silakan coba lagi nanti.';
+        }
+    } catch (Exception $e) {
+        error_log("Error in cek_tagihan.php (GET username): ". $e->getMessage());
+        $error_message = 'Terjadi kesalahan pada server. Silakan coba lagi nanti.';
+    }
+} 
+// --- AKHIR PERBAIKAN GET ---
+else if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['check_bill'])) {
     $whatsapp_input = trim($_POST['whatsapp_number']);
 
     if (empty($whatsapp_input)) {
@@ -83,7 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['check_bill'])) {
             $API = new RouterosAPI();
             $API->debug = false;
             $user_found = false;
-            $username = ''; // Inisialisasi username
+            // $username = ''; // Sudah diinisialisasi di atas
 
             // Gunakan pengaturan dari $app_settings
             if ($API->connect($app_settings['router_ip'], $app_settings['router_user'], $app_settings['router_pass'])) {
@@ -135,11 +160,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['check_bill'])) {
             }
 
         } catch (Exception $e) {
-            error_log("Error in cek_tagihan.php: ". $e->getMessage());
+            error_log("Error in cek_tagihan.php (POST whatsapp): ". $e->getMessage());
             $error_message = 'Terjadi kesalahan pada server. Silakan coba lagi nanti.';
         }
     }
 }
+// Jika tidak ada POST request atau GET parameter 'u', tampilkan form kosong
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -175,6 +201,42 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['check_bill'])) {
             --bs-table-border-color: #2a2e34;
             --bs-table-hover-bg: #32383e;
         }
+        /* Style for payment channel buttons */
+        .payment-channel-btn {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 15px;
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            border: 1px solid #3e444a;
+            border-radius: 0.375rem;
+            background-color: #2c3034;
+            color: #d1d2d3;
+            text-align: left;
+            width: 100%;
+            transition: all 0.2s ease-in-out;
+        }
+        .payment-channel-btn:hover {
+            background-color: #32383e;
+            border-color: #4e73df;
+            color: #fff;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .payment-channel-btn img {
+            max-height: 30px;
+            max-width: 60px;
+            object-fit: contain;
+            border-radius: 4px;
+        }
+        .payment-channel-btn span {
+            font-weight: bold;
+        }
+        .payment-channel-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
@@ -186,20 +248,26 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['check_bill'])) {
                         <h3 class="mb-0 text-white"><i class="fas fa-file-invoice-dollar me-2"></i>Cek Tagihan Anda</h3>
                     </div>
                     <div class="card-body p-4">
-                        <p class="text-center text-muted">Masukkan nomor WhatsApp Anda yang terdaftar untuk melihat tagihan.</p>
-                        <form method="POST" action="cek_tagihan.php">
-                            <input type="hidden" name="check_bill" value="1">
-                            <div class="input-group mb-3">
-                                <input type="tel" class="form-control form-control-lg" id="whatsapp_number" name="whatsapp_number" placeholder="Contoh: 081234567890" value="<?= htmlspecialchars($whatsapp_input) ?>" required>
-                                <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-search me-2"></i>Cek</button>
-                            </div>
-                        </form>
-
                         <?php if (!empty($error_message)): ?>
                             <div class="alert alert-warning mt-4"><?= $error_message ?></div>
                         <?php endif; ?>
 
-                        <?php if (!empty($invoices)): ?>
+                        <?php 
+                        // --- PERBAIKAN: Tampilkan form input WA hanya jika tidak ada username dari URL dan tidak ada POST data ---
+                        if (empty($username) && empty($_POST['check_bill'])): 
+                        ?>
+                        <p class="text-center text-muted">Masukkan nomor WhatsApp Anda yang terdaftar untuk melihat tagihan.</p>
+                        <form method="POST" action="cek_tagihan.php">
+                            <input type="hidden" name="check_bill" value="1">
+                            <div class="input-group mb-3">
+                                <input type="tel" class="form-control form-control-lg" id="whatsapp_number" name="whatsapp_number" placeholder="Contoh: 081234567890" value="" required>
+                                <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-search me-2"></i>Cek</button>
+                            </div>
+                        </form>
+                        <?php 
+                        // --- AKHIR PERBAIKAN ---
+                        elseif (!empty($invoices)): 
+                        ?>
                         <hr class="my-4">
                         <h4 class="mb-3">Tagihan untuk: <span class="text-primary"><?= htmlspecialchars($username) ?></span></h4>
                         <div class="table-responsive">
@@ -219,10 +287,16 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['check_bill'])) {
                                         <td class="fw-bold"><?= number_format($invoice['amount'], 0, ',', '.') ?></td>
                                         <td><?= date('d F Y', strtotime($invoice['due_date'])) ?></td>
                                         <td class="text-center">
-                                            <form action="request_payment.php" method="POST">
-                                                <input type="hidden" name="invoice_id" value="<?= $invoice['id'] ?>">
-                                                <button type="submit" class="btn btn-success"><i class="fas fa-credit-card me-2"></i>Bayar Sekarang</button>
-                                            </form>
+                                            <!-- Tombol "Bayar Sekarang" yang memicu modal -->
+                                            <button type="button" class="btn btn-success select-payment-method-btn" 
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#paymentMethodModal"
+                                                    data-invoice-id="<?= $invoice['id'] ?>"
+                                                    data-invoice-amount="<?= $invoice['amount'] ?>"
+                                                    data-invoice-username="<?= htmlspecialchars($invoice['username']) ?>"
+                                                    title="Pilih Metode Pembayaran">
+                                                <i class="fas fa-credit-card me-2"></i>Bayar Sekarang
+                                            </button>
                                         </td>
                                     </tr>
                                     <?php endforeach; ?>
@@ -235,5 +309,78 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['check_bill'])) {
             </div>
         </div>
     </div>
+
+    <!-- Modal Pemilihan Metode Pembayaran -->
+    <div class="modal fade" id="paymentMethodModal" tabindex="-1" aria-labelledby="paymentMethodModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="paymentMethodModalLabel">Pilih Metode Pembayaran</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">Anda akan membayar tagihan untuk <strong id="modal-invoice-username-display"></strong> sebesar <strong id="modal-invoice-amount-display"></strong>.</p>
+                    <hr>
+                    <div id="payment-channels-list">
+                        <?php if (!empty($filtered_payment_channels)): ?>
+                            <?php foreach ($filtered_payment_channels as $channel): ?>
+                                <button type="button" class="payment-channel-btn" 
+                                        data-method-code="<?= htmlspecialchars($channel['code']) ?>"
+                                        data-method-name="<?= htmlspecialchars($channel['name']) ?>"
+                                        <?= $channel['active'] ? '' : 'disabled' ?>>
+                                    <?php if (!empty($channel['icon_url'])): ?>
+                                        <img src="<?= htmlspecialchars($channel['icon_url']) ?>" onerror="this.onerror=null;this.src='https://placehold.co/60x30/2c3034/d1d2d3?text=No+Icon';" alt="<?= htmlspecialchars($channel['name']) ?>">
+                                    <?php else: ?>
+                                        <img src="https://placehold.co/60x30/2c3034/d1d2d3?text=No+Icon" alt="No Icon">
+                                    <?php endif; ?>
+                                    <span><?= htmlspecialchars($channel['name']) ?></span>
+                                </button>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <div class="alert alert-warning text-center">Tidak ada metode pembayaran yang tersedia.</div>
+                        <?php endif; ?>
+                    </div>
+                    <!-- Hidden form to submit to request_payment.php -->
+                    <form id="paymentForm" action="request_payment.php" method="POST" style="display: none;">
+                        <input type="hidden" name="invoice_id" id="hidden_invoice_id">
+                        <input type="hidden" name="payment_method_code" id="hidden_payment_method_code">
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const paymentMethodModal = document.getElementById('paymentMethodModal');
+            const hiddenInvoiceId = document.getElementById('hidden_invoice_id');
+            const hiddenPaymentMethodCode = document.getElementById('hidden_payment_method_code');
+            const paymentForm = document.getElementById('paymentForm');
+            const modalInvoiceAmountDisplay = document.getElementById('modal-invoice-amount-display');
+            const modalInvoiceUsernameDisplay = document.getElementById('modal-invoice-username-display');
+
+            paymentMethodModal.addEventListener('show.bs.modal', function (event) {
+                const button = event.relatedTarget;
+                const invoiceId = button.getAttribute('data-invoice-id');
+                const invoiceAmount = button.getAttribute('data-invoice-amount');
+                const invoiceUsername = button.getAttribute('data-invoice-username');
+
+                hiddenInvoiceId.value = invoiceId;
+                modalInvoiceAmountDisplay.textContent = 'Rp ' + new Intl.NumberFormat('id-ID').format(invoiceAmount);
+                modalInvoiceUsernameDisplay.textContent = invoiceUsername;
+            });
+
+            // Add click listener to all payment channel buttons inside the modal
+            const paymentChannelButtons = document.querySelectorAll('#paymentMethodModal .payment-channel-btn');
+            paymentChannelButtons.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const methodCode = this.getAttribute('data-method-code');
+                    hiddenPaymentMethodCode.value = methodCode;
+                    paymentForm.submit(); // Submit the hidden form
+                });
+            });
+        });
+    </script>
 </body>
 </html>

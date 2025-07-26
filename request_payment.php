@@ -49,11 +49,13 @@ function display_error($message) {
     ');
 }
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['invoice_id'])) {
-    display_error('Akses tidak valid.');
+// --- PERBAIKAN: Pastikan payment_method_code diterima ---
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['invoice_id']) || !isset($_POST['payment_method_code'])) {
+    display_error('Akses tidak valid atau metode pembayaran belum dipilih.');
 }
 
 $invoice_id = $_POST['invoice_id'];
+$payment_method_code = $_POST['payment_method_code']; // Ambil kode metode pembayaran
 
 // 1. Ambil detail tagihan dari database
 try {
@@ -76,7 +78,7 @@ $amount         = $invoice['amount'];
 global $app_settings; // Akses variabel global $app_settings
 
 $data = [
-    'method'            => 'QRIS', // Metode pembayaran default, bisa diganti
+    'method'            => $payment_method_code, // --- PERBAIKAN: Gunakan metode pembayaran yang dipilih ---
     'merchant_ref'      => $merchantRef,
     'amount'            => $amount,
     'customer_name'     => $invoice['username'],
@@ -107,7 +109,8 @@ curl_setopt_array($curl, [
     CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . $app_settings['tripay_api_key']],
     CURLOPT_FAILONERROR    => false,
     CURLOPT_POST           => true,
-    CURLOPT_POSTFIELDS     => http_build_query($data)
+    CURLOPT_POSTFIELDS     => http_build_query($data),
+    CURLOPT_IPRESOLVE      => CURL_IPRESOLVE_V4 // Force IPv4 to avoid issues with some hosting
 ]);
 
 $response = curl_exec($curl);
@@ -129,6 +132,12 @@ if (isset($result['success']) && $result['success'] == true && isset($result['da
 } else {
     // Tampilkan pesan error jika gagal membuat transaksi
     $error_message = isset($result['message']) ? $result['message'] : 'Gagal membuat transaksi pembayaran.';
+    // Tambahkan detail error dari Tripay jika ada
+    if (isset($result['errors'])) {
+        foreach ($result['errors'] as $field => $msg) {
+            $error_message .= " (" . htmlspecialchars($field) . ": " . htmlspecialchars(implode(', ', $msg)) . ")";
+        }
+    }
     display_error($error_message);
 }
 ?>

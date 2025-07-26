@@ -33,6 +33,41 @@ if ($_SESSION['role'] !== 'admin') {
 </div>
 
 <div class="card shadow-sm mb-4">
+    <div class="card-header"><h5 class="card-title mb-0 text-white">Pengaturan Koneksi Database (MySQL)</h5></div>
+    <div class="card-body">
+        <form action="index.php?page=pengaturan" method="POST">
+            <input type="hidden" name="action" value="save_settings">
+            <div class="mb-3">
+                <label for="db_host" class="form-label">Host Database</label>
+                <input type="text" name="db_host" id="db_host" class="form-control" value="<?= htmlspecialchars($settings['db_host'] ?? '') ?>" required>
+                <div class="form-text">Contoh: localhost atau 127.0.0.1</div>
+            </div>
+            <div class="mb-3">
+                <label for="db_port" class="form-label">Port Database</label>
+                <input type="number" name="db_port" id="db_port" class="form-control" value="<?= htmlspecialchars($settings['db_port'] ?? '3306') ?>" required>
+                <div class="form-text">Port default MySQL adalah 3306.</div>
+            </div>
+            <div class="mb-3">
+                <label for="db_name" class="form-label">Nama Database</label>
+                <input type="text" name="db_name" id="db_name" class="form-control" value="<?= htmlspecialchars($settings['db_name'] ?? '') ?>" required>
+            </div>
+            <div class="mb-3">
+                <label for="db_user" class="form-label">Username Database</label>
+                <input type="text" name="db_user" id="db_user" class="form-control" value="<?= htmlspecialchars($settings['db_user'] ?? '') ?>" required>
+            </div>
+            <div class="mb-3">
+                <label for="db_pass" class="form-label">Password Database</label>
+                <input type="password" name="db_pass" id="db_pass" class="form-control" value="<?= htmlspecialchars($settings['db_pass'] ?? '') ?>" placeholder="Kosongkan jika tidak ingin diubah">
+                <div class="form-text">Kosongkan jika tidak ingin mengubah password yang sudah tersimpan.</div>
+            </div>
+            <?php if ($_SESSION['role'] === 'admin'): ?>
+            <button type="submit" class="btn btn-primary">Simpan Pengaturan Database</button>
+            <?php endif; ?>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
     <div class="card-header"><h5 class="card-title mb-0 text-white">Pengaturan Payment Gateway (Tripay)</h5></div>
     <div class="card-body">
         <form action="index.php?page=pengaturan" method="POST">
@@ -63,7 +98,7 @@ if ($_SESSION['role'] !== 'admin') {
 <div class="card shadow-sm mb-4">
     <div class="card-header"><h5 class="card-title mb-0 text-white">Pengaturan WhatsApp Gateway (Fonnte)</h5></div>
     <div class="card-body">
-        <form action="index.php?page=pengaturan" method="POST" id="fonteeSettingsForm">
+        <form action="index.php?page=pengaturan" method="POST" id="fonnteeSettingsForm">
             <input type="hidden" name="action" value="save_settings">
             <div class="mb-3">
                 <label for="fonnte_api_key" class="form-label">Fonnte API Key</label>

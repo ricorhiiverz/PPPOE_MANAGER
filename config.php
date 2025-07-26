@@ -1,6 +1,5 @@
 <?php
-// File ini sekarang berfungsi sebagai pusat untuk mengelola pengaturan aplikasi.
-// Pengaturan akan dibaca dari dan disimpan ke file settings.json.
+// File ini sekarang berfungsi sebagai pusat untuk mengelola pengaturan aplikasi dan koneksi database.
 
 // Path ke file settings.json
 define('SETTINGS_FILE', 'settings.json');
@@ -25,6 +24,14 @@ function get_app_settings() {
         'fonnte_api_key' => '', // Ganti dengan API Key Fonnte Anda
         'fonnte_instance_id' => '', // Tetap ada di settings, tapi tidak akan dikirim ke API jika tidak diperlukan
         'fonnte_base_url' => 'https://api.fonnte.com/send', // URL API Fonnte
+
+        // --- PENGATURAN BARU UNTUK DATABASE MYSQL ---
+        'db_host' => 'localhost', // Ganti dengan host database Anda
+        'db_name' => 'u409826558_web_manager', // Ganti dengan nama database Anda
+        'db_user' => 'u409826558_web_manager', // Ganti dengan username database Anda
+        'db_pass' => 's!P[Hb3v7H4N', // Ganti dengan password database Anda
+        'db_port' => 3306 // Port default MySQL
+        // --- AKHIR PENGATURAN BARU ---
     ];
 
     if (file_exists(SETTINGS_FILE)) {
@@ -59,7 +66,14 @@ function save_app_settings($settings) {
         'tripay_production_mode',
         'fonnte_api_key',
         'fonnte_instance_id', // Tetap izinkan penyimpanan
-        'fonnte_base_url'
+        'fonnte_base_url',
+        // --- KUNCI BARU UNTUK DATABASE MYSQL ---
+        'db_host',
+        'db_name',
+        'db_user',
+        'db_pass',
+        'db_port'
+        // --- AKHIR KUNCI BARU ---
     ];
 
     foreach ($allowed_keys as $key) {
@@ -162,6 +176,183 @@ function parse_comment_for_wa($comment) {
         }
     }
     return null;
+}
+
+/**
+ * Mengambil daftar channel pembayaran dari Tripay API.
+ *
+ * @return array Array berisi daftar channel pembayaran atau array kosong jika gagal.
+ */
+function getTripayPaymentChannels() {
+    global $app_settings;
+
+    $apiKey = $app_settings['tripay_api_key'];
+    $productionMode = $app_settings['tripay_production_mode'];
+
+    if (empty($apiKey)) {
+        error_log("Tripay API Key is not set. Cannot fetch payment channels.");
+        return [];
+    }
+
+    $apiUrl = $productionMode ? 'https://tripay.co.id/api/merchant/payment-channel' : 'https://tripay.co.id/api-sandbox/merchant/payment-channel';
+
+    $curl = curl_init();
+
+    curl_setopt_array($curl, [
+        CURLOPT_FRESH_CONNECT  => true,
+        CURLOPT_URL            => $apiUrl,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HEADER         => false,
+        CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . $apiKey],
+        CURLOPT_FAILONERROR    => false,
+        CURLOPT_IPRESOLVE      => CURL_IPRESOLVE_V4 // Force IPv4 to avoid issues with some hosting
+    ]);
+
+    $response = curl_exec($curl);
+    $error = curl_error($curl);
+
+    curl_close($curl);
+
+    if ($error) {
+        error_log("cURL Error fetching Tripay channels: " . $error);
+        return [];
+    }
+
+    $result = json_decode($response, true);
+
+    if (isset($result['success']) && $result['success'] === true && isset($result['data'])) {
+        return $result['data'];
+    } else {
+        error_log("Tripay API Error fetching channels: " . ($result['message'] ?? json_encode($result) ?? 'Unknown error'));
+        return [];
+    }
+}
+
+/**
+ * Menghubungkan ke database MySQL.
+ * Fungsi ini dipindahkan ke config.php agar hanya dideklarasikan sekali.
+ *
+ * @return PDO Objek PDO untuk koneksi database.
+ */
+function connect_db() {
+    global $app_settings;
+    $host = $app_settings['db_host'];
+    $db   = $app_settings['db_name'];
+    $user = $app_settings['db_user'];
+    $pass = $app_settings['db_pass'];
+    $port = $app_settings['db_port'];
+    $charset = 'utf8mb4';
+
+    $dsn = "mysql:host=$host;port=$port;dbname=$db;charset=$charset";
+    $options = [
+        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES   => false,
+    ];
+    try {
+        $pdo = new PDO($dsn, $user, $pass, $options);
+        return $pdo;
+    } catch (PDOException $e) {
+        error_log("Koneksi database gagal: " . $e->getMessage());
+        // Melemparkan kembali exception agar ditangani oleh global exception handler di index.php
+        throw new PDOException("Koneksi database gagal. Silakan hubungi administrator.");
+    }
+}
+
+/**
+ * Menginisialisasi skema database (membuat tabel jika belum ada).
+ * Fungsi ini dipindahkan ke config.php agar hanya dideklarasikan sekali.
+ */
+function initialize_database() {
+    $pdo = connect_db();
+    
+    $pdo->exec(<<<SQL
+        CREATE TABLE IF NOT EXISTS users (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(255) NOT NULL UNIQUE,
+            password VARCHAR(255) NOT NULL,
+            role VARCHAR(50) NOT NULL, -- Contoh: 'admin', 'teknisi', 'penagih'
+            full_name VARCHAR(255),
+            assigned_regions JSON -- Menyimpan array JSON dari nama wilayah yang ditugaskan
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    SQL);
+    
+    // Tabel customers
+    $pdo->exec(<<<SQL
+        CREATE TABLE IF NOT EXISTS customers (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(255) NOT NULL UNIQUE, -- Username PPPoE pelanggan
+            password VARCHAR(255), -- Password PPPoE (hashed jika disimpan di sini, atau null jika hanya di MikroTik)
+            profile_name VARCHAR(255) NOT NULL, -- Nama profil PPPoE yang digunakan
+            service VARCHAR(50) DEFAULT 'pppoe', -- Tipe service PPPoE (misal: 'pppoe', 'any')
+            koordinat VARCHAR(255), -- Koordinat lokasi pelanggan (contoh: "-6.123, 106.456")
+            wilayah VARCHAR(255), -- Nama wilayah/area pelanggan
+            whatsapp VARCHAR(255), -- Nomor WhatsApp pelanggan
+            tgl_registrasi DATE, -- Tanggal registrasi pelanggan
+            tgl_tagihan INT, -- Tanggal jatuh tempo tagihan setiap bulan (1-31)
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    SQL);
+
+    // Tabel profiles
+    $pdo->exec(<<<SQL
+        CREATE TABLE IF NOT EXISTS profiles (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            profile_name VARCHAR(255) NOT NULL UNIQUE, -- Nama profil PPPoE
+            rate_limit VARCHAR(255), -- Batas kecepatan (contoh: "5M/10M")
+            local_address VARCHAR(255), -- Local address profil
+            remote_address VARCHAR(255), -- Remote address atau pool profil
+            tagihan_amount INT, -- Jumlah tagihan untuk profil ini
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    SQL);
+
+    // Tabel invoices
+    $pdo->exec(<<<SQL
+        CREATE TABLE IF NOT EXISTS invoices (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_secret_id INT NOT NULL, -- Mengacu pada ID pelanggan di tabel 'customers'
+            username VARCHAR(255) NOT NULL, -- Username pelanggan (untuk kemudahan query)
+            profile_name VARCHAR(255) NOT NULL,
+            billing_month VARCHAR(7) NOT NULL, -- Format YYYY-MM (misal: '2025-07')
+            amount INT NOT NULL,
+            status VARCHAR(50) NOT NULL DEFAULT 'Belum Lunas', -- Contoh: 'Belum Lunas', 'Lunas'
+            due_date DATE NOT NULL,
+            paid_date DATETIME,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_by VARCHAR(255), -- Nama user yang mengkonfirmasi pembayaran
+            payment_method VARCHAR(100), -- Metode pembayaran (misal: 'Cash', 'Online')
+            UNIQUE KEY unique_invoice (user_secret_id, billing_month), -- Memastikan satu tagihan per pelanggan per bulan
+            FOREIGN KEY (user_secret_id) REFERENCES customers(id) ON DELETE CASCADE ON UPDATE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    SQL);
+
+    // Tabel reports
+    $pdo->exec(<<<SQL
+        CREATE TABLE IF NOT EXISTS reports (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            customer_username VARCHAR(255) NOT NULL,
+            issue_description TEXT NOT NULL,
+            report_status VARCHAR(50) NOT NULL DEFAULT 'Pending',
+            reported_by VARCHAR(255) NOT NULL,
+            assigned_to JSON,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            resolved_at DATETIME
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    SQL);
+
+    // Tabel regions
+    $pdo->exec(<<<SQL
+        CREATE TABLE IF NOT EXISTS regions (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            region_name VARCHAR(255) NOT NULL UNIQUE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    SQL);
 }
 
 

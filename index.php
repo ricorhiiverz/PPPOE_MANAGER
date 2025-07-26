@@ -1,106 +1,126 @@
 <?php
 session_start();
-// --- PERBAIKAN: Pastikan zona waktu adalah WIB (Asia/Jakarta) untuk seluruh aplikasi ---
+// Pastikan zona waktu adalah WIB (Asia/Jakarta) untuk seluruh aplikasi
 date_default_timezone_set('Asia/Jakarta');
-// --- AKHIR PERBABAIKAN ---
+
+// =================================================================
+// GLOBAL ERROR HANDLING (Untuk membantu debugging 500 errors)
+// =================================================================
+set_exception_handler(function ($exception) {
+    error_log("UNCAUGHT EXCEPTION: " . $exception->getMessage() . " in " . $exception->getFile() . " on line " . $exception->getLine());
+    http_response_code(500);
+    echo '<!DOCTYPE html>
+    <html lang="id">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Error Server</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+        <style>
+            body { background-color: #16191c; color: #d1d2d3; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+            .card { background-color: #212529; border: 1px solid #2a2e34; }
+        </style>
+    </head>
+    <body>
+        <div class="container text-center">
+            <div class="card p-4 shadow-lg">
+                <h1 class="card-title text-danger"><i class="fas fa-exclamation-circle"></i> Error 500</h1>
+                <p class="card-text">Terjadi kesalahan tak terduga di server. Mohon maaf atas ketidaknyamananannya.</p>
+                <p class="card-text">Silakan coba lagi nanti atau hubungi administrator.</p>
+                <hr>
+                <p class="card-text small text-muted">Detail error telah dicatat.</p>
+                <a href="index.php" class="btn btn-primary mt-3">Kembali ke Beranda</a>
+            </div>
+        </div>
+    </body>
+    </html>';
+    exit();
+});
+
+register_shutdown_function(function () {
+    $error = error_get_last();
+    // Check if it's a fatal error (E_ERROR, E_PARSE, E_CORE_ERROR, E_CORE_WARNING, E_COMPILE_ERROR, E_COMPILE_WARNING)
+    if ($error !== null && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_CORE_WARNING, E_COMPILE_ERROR, E_COMPILE_WARNING])) {
+        error_log("FATAL ERROR: " . $error['message'] . " in " . $error['file'] . " on line " . $error['line']);
+        // If headers already sent, we can't send a 500 response code, but we can still show the message
+        if (!headers_sent()) {
+            http_response_code(500);
+        }
+        echo '<!DOCTYPE html>
+        <html lang="id">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Error Server</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+            <style>
+                body { background-color: #16191c; color: #d1d2d3; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+                .card { background-color: #212529; border: 1px solid #2a2e34; }
+            </style>
+        </head>
+        <body>
+            <div class="container text-center">
+                <div class="card p-4 shadow-lg">
+                    <h1 class="card-title text-danger"><i class="fas fa-exclamation-circle"></i> Error 500</h1>
+                    <p class="card-text">Terjadi kesalahan fatal di server. Mohon maaf atas ketidaknyamananannya.</p>
+                    <p class="card-text">Silakan coba lagi nanti atau hubungi administrator.</p>
+                    <hr>
+                    <p class="card-text small text-muted">Detail error telah dicatat.</p>
+                    <a href="index.php" class="btn btn-primary mt-3">Kembali ke Beranda</a>
+                </div>
+            </div>
+        </body>
+        </html>';
+        exit();
+    }
+});
+// =================================================================
+// END GLOBAL ERROR HANDLING
+// =================================================================
+
 
 // =================================================================
 // SETUP & DATABASE
 // =================================================================
-$db_file = 'users.db';
-$db_exists = file_exists($db_file);
-
 // Sertakan file konfigurasi yang sekarang memuat pengaturan aplikasi
 require_once('config.php'); // Menggunakan require_once untuk menghindari duplikasi
 
-function connect_db() {
-    global $db_file;
-    try {
-        $pdo = new PDO('sqlite:' . $db_file);
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        return $pdo;
-    } catch (PDOException $e) { die("Koneksi database gagal: " . $e->getMessage()); }
-}
+// Akses pengaturan aplikasi global
+global $app_settings;
 
-function initialize_database() {
-    $pdo = connect_db();
-    // Tabel Users
-    $pdo->exec("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE, password TEXT NOT NULL, role TEXT NOT NULL)");
-    
-    // Tabel Invoices
-    $pdo->exec("CREATE TABLE IF NOT EXISTS invoices (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_secret_id TEXT NOT NULL,
-        username TEXT NOT NULL,
-        profile_name TEXT NOT NULL,
-        billing_month TEXT NOT NULL,
-        amount INTEGER NOT NULL,
-        status TEXT NOT NULL DEFAULT 'Belum Lunas',
-        due_date DATE NOT NULL,
-        paid_date DATETIME,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_by TEXT,
-        UNIQUE(user_secret_id, billing_month)
-    )");
+// Cek apakah ada user di database. Jika tidak ada, arahkan ke setup page.
+try {
+    $pdo = connect_db(); // Panggil fungsi dari config.php
+    initialize_database(); // Panggil fungsi dari config.php
+    $stmt = $pdo->query("SELECT COUNT(*) FROM users");
+    $user_count = $stmt->fetchColumn();
 
-    // New: Tabel Reports
-    $pdo->exec("CREATE TABLE IF NOT EXISTS reports (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        customer_username TEXT NOT NULL,
-        issue_description TEXT NOT NULL,
-        report_status TEXT NOT NULL DEFAULT 'Pending', -- Pending, In Progress, Resolved, Cancelled
-        reported_by TEXT NOT NULL, -- Username of admin/staff who reported
-        assigned_to TEXT, -- Username of technician assigned (now stores JSON array)
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        resolved_at DATETIME,
-        FOREIGN KEY (customer_username) REFERENCES invoices(username) ON DELETE CASCADE
-    )");
-
-    // *** FIX: Check and add new columns if they don't exist ***
-    try {
-        // Check for 'payment_method' in 'invoices'
-        $columns_invoices_stmt = $pdo->query("PRAGMA table_info(invoices)");
-        $columns_invoices = $columns_invoices_stmt->fetchAll(PDO::FETCH_COLUMN, 1);
-        if (!in_array('payment_method', $columns_invoices)) {
-            $pdo->exec("ALTER TABLE invoices ADD COLUMN payment_method TEXT");
+    if ($user_count === 0) {
+        // Jika belum ada user, tampilkan halaman setup admin
+        if (isset($_POST['setup_admin'])) {
+            $username = trim($_POST['username']);
+            $password = trim($_POST['password']);
+            if (!empty($username) && !empty($password)) {
+                try {
+                    $stmt = $pdo->prepare("INSERT INTO users (username, password, role, full_name, assigned_regions) VALUES (?, ?, ?, ?, ?)");
+                    $stmt->execute([$username, password_hash($password, PASSWORD_DEFAULT), 'admin', 'Administrator', json_encode([])]);
+                    header('Location: index.php'); exit;
+                } catch (PDOException $e) {
+                    $setup_error = "Setup gagal: " . $e->getMessage();
+                }
+            } else {
+                $setup_error = "Username dan password tidak boleh kosong.";
+            }
         }
-
-        // Check for 'full_name' in 'users'
-        $columns_users_stmt = $pdo->query("PRAGMA table_info(users)");
-        $columns_users = $columns_users_stmt->fetchAll(PDO::FETCH_COLUMN, 1);
-        if (!in_array('full_name', $columns_users)) {
-            $pdo->exec("ALTER TABLE users ADD COLUMN full_name TEXT");
-        }
-        // New: Check for 'assigned_regions' in 'users'
-        if (!in_array('assigned_regions', $columns_users)) {
-            $pdo->exec("ALTER TABLE users ADD COLUMN assigned_regions TEXT"); // Store as JSON string
-        }
-
-    } catch (PDOException $e) {
-        // Ignore errors if tables don't exist yet, they will be created above.
+        include 'setup_page.php';
+        exit;
     }
-}
-
-
-if (!$db_exists) {
-    if (isset($_POST['setup_admin'])) {
-        $username = trim($_POST['username']); $password = trim($_POST['password']);
-        if (!empty($username) && !empty($password)) {
-            try {
-                initialize_database();
-                $pdo = connect_db();
-                // Add admin with full_name and empty assigned_regions
-                $stmt = $pdo->prepare("INSERT INTO users (username, password, role, full_name, assigned_regions) VALUES (?, ?, ?, ?, ?)");
-                $stmt->execute([$username, password_hash($password, PASSWORD_DEFAULT), 'admin', 'Administrator', json_encode([])]);
-                header('Location: index.php'); exit;
-            } catch (PDOException $e) { die("Setup gagal: " . $e->getMessage()); }
-        }
-    }
-    include 'setup_page.php'; exit;
-} else {
-    // Run initialization on every load to check for new columns
-    initialize_database();
+} catch (PDOException $e) {
+    // Jika koneksi database gagal saat startup (misal, database belum dibuat)
+    // Tampilkan halaman setup dengan pesan error yang sesuai.
+    $setup_error = "Koneksi database atau inisialisasi gagal: " . $e->getMessage() . ". Pastikan database MySQL sudah dibuat dan kredensial di config.php benar.";
+    include 'setup_page.php';
+    exit;
 }
 
 
@@ -167,7 +187,17 @@ if (isset($_GET['action']) && $_GET['action'] === 'export_invoices') {
     if ($_SESSION['role'] === 'penagih') {
         // Fetch secrets for the assigned regions specifically for export
         $temp_filtered_secrets_for_export = [];
-        $all_secrets_for_export = $API->comm('/ppp/secret/print'); // Re-fetch if not global
+        // Re-initialize API for this block if not already done
+        $API_export = new RouterosAPI();
+        global $app_settings; // Ensure app_settings is available
+        if ($API_export->connect($app_settings['router_ip'], $app_settings['router_user'], $app_settings['router_pass'])) {
+            $all_secrets_for_export = $API_export->comm('/ppp/secret/print');
+            $API_export->disconnect(); // Disconnect after use
+        } else {
+            error_log("EXPORT ERROR: Could not connect to MikroTik for export.");
+            $all_secrets_for_export = []; // Set to empty to avoid errors
+        }
+
         if (!empty($_SESSION['assigned_regions'])) {
             foreach ($all_secrets_for_export as $secret) {
                 $comment_data = parse_comment_string($secret['comment'] ?? '');
@@ -235,8 +265,8 @@ require('RouterosAPI.php'); // Panggil RouterosAPI setelah config dimuat
 // Fungsi get_settings dan save_settings yang lama diganti dengan get_app_settings dan save_app_settings dari config.php
 // function get_settings() { $settings_file = 'settings.json'; if (!file_exists($settings_file)) { return ['monitor_interface' => null]; } return json_decode(file_get_contents($settings_file), true); }
 // function save_settings($data) { file_put_contents('settings.json', json_encode($data, JSON_PRETTY_PRINT)); }
-function get_wilayah() { $wilayah_file = 'wilayah.json'; if (!file_exists($wilayah_file)) { return []; } return json_decode(file_get_contents($wilayah_file), true); }
-function save_wilayah($data) { file_put_contents('wilayah.json', json_encode($data, JSON_PRETTY_PRINT)); }
+// function get_wilayah() { $wilayah_file = 'wilayah.json'; if (!file_exists($wilayah_file)) { return []; } return json_decode(file_get_contents($wilayah_file), true); } // Diganti dengan DB
+// function save_wilayah($data) { file_put_contents('wilayah.json', json_encode($data, JSON_PRETTY_PRINT)); } // Diganti dengan DB
 
 // Fungsi build_comment_string dan parse_comment_string tetap di sini karena spesifik untuk struktur komentar MikroTik
 function build_comment_string($post_data, $prefix = '') {
@@ -297,24 +327,62 @@ if (isset($_GET['action']) && $_GET['action'] !== 'export_invoices') { /* ... AJ
         }
     }
 
+    // --- PERBAIKAN: get_user_details akan mengambil data dari DB dan MikroTik ---
     if ($action === 'get_user_details' && isset($_GET['id'])) {
-        $userId = $_GET['id']; $secret_details_array = $API_AJAX->comm("/ppp/secret/print", ["?.id" => $userId]);
-        if (empty($secret_details_array)) { echo json_encode(['error' => 'Pelanggan tidak ditemukan.']); exit; }
-        $secret_details = $secret_details_array[0];
-        $active_user_array = $API_AJAX->comm("/ppp/active/print", ["?name" => $secret_details['name']]);
+        $pdo = connect_db();
+        $user_id_db = $_GET['id']; // Ini adalah ID dari database kita, bukan MikroTik
         
-        $details = $secret_details;
-        $comment_details = parse_comment_string($details['comment'] ?? '');
-        $details = array_merge($details, $comment_details);
+        // Ambil data pelanggan dari database
+        $stmt_db = $pdo->prepare("SELECT * FROM customers WHERE id = ?");
+        $stmt_db->execute([$user_id_db]);
+        $customer_db = $stmt_db->fetch(PDO::FETCH_ASSOC);
 
-        $profile_info_array = $API_AJAX->comm("/ppp/profile/print", ["?name" => $details['profile']]);
-        if (!empty($profile_info_array)) {
-            $profile_comment_data = parse_comment_string($profile_info_array[0]['comment'] ?? '');
-            $details['tagihan'] = $profile_comment_data['tagihan'];
+        if (!$customer_db) {
+            echo json_encode(['error' => 'Pelanggan tidak ditemukan di database.']);
+            exit;
         }
 
-        if (!empty($active_user_array)) { $details['status-online'] = true; $details['address'] = $active_user_array[0]['address'] ?? 'N/A'; $details['uptime'] = $active_user_array[0]['uptime'] ?? 'N/A'; } 
-        else { $details['status-online'] = false; }
+        // Ambil data real-time dari MikroTik
+        $secret_details_array = $API_AJAX->comm("/ppp/secret/print", ["?name" => $customer_db['username']]);
+        
+        $details = $customer_db; // Mulai dengan data dari database
+
+        if (!empty($secret_details_array)) {
+            $secret_details = $secret_details_array[0];
+            $active_user_array = $API_AJAX->comm("/ppp/active/print", ["?name" => $secret_details['name']]);
+            
+            // Gabungkan status real-time dari MikroTik
+            $details['mikrotik_id'] = $secret_details['.id']; // ID MikroTik
+            $details['status_mikrotik'] = (isset($secret_details['disabled']) && $secret_details['disabled'] === 'true') ? 'disabled' : 'enabled';
+            $details['status-online'] = !empty($active_user_array);
+            $details['address'] = $active_user_array[0]['address'] ?? 'N/A';
+            $details['uptime'] = $active_user_array[0]['uptime'] ?? 'N/A';
+            $details['last-logged-out'] = $secret_details['last-logged-out'] ?? 'N/A';
+            $details['profile'] = $secret_details['profile'] ?? 'N/A'; // Ambil profil dari MikroTik
+            $details['service'] = $secret_details['service'] ?? 'N/A'; // Ambil service dari MikroTik
+            
+            // Ambil tagihan dari profil MikroTik (jika masih diperlukan dari sana)
+            $profile_info_array = $API_AJAX->comm("/ppp/profile/print", ["?name" => $details['profile']]);
+            if (!empty($profile_info_array)) {
+                $profile_comment_data = parse_comment_string($profile_info_array[0]['comment'] ?? '');
+                $details['tagihan_profile'] = $profile_comment_data['tagihan'];
+            } else {
+                $details['tagihan_profile'] = 'N/A';
+            }
+
+        } else {
+            // Pelanggan tidak ditemukan di MikroTik, anggap offline/disabled
+            $details['mikrotik_id'] = null;
+            $details['status_mikrotik'] = 'not_found';
+            $details['status-online'] = false;
+            $details['address'] = 'N/A';
+            $details['uptime'] = 'N/A';
+            $details['last-logged-out'] = 'N/A';
+            $details['profile'] = $customer_db['profile_name'] ?? 'N/A'; // Fallback ke profil di DB
+            $details['service'] = 'pppoe'; // Default service
+            $details['tagihan_profile'] = 'N/A';
+        }
+        
         echo json_encode($details);
     } elseif ($action === 'test_fonnte_api') { // New AJAX action for Fonnte API test
         $input = json_decode(file_get_contents('php://input'), true);
@@ -376,6 +444,46 @@ try {
     // Gunakan pengaturan dari $app_settings
     if ($API->connect($app_settings['router_ip'], $app_settings['router_user'], $app_settings['router_pass'])) {
         $connection_status = true;
+        // Pre-fetch all secrets and profiles once if needed by multiple pages,
+        // and build a map for efficient lookup.
+        $all_secrets_mikrotik = $API->comm('/ppp/secret/print'); // Data dari MikroTik
+        $all_profiles_mikrotik = $API->comm('/ppp/profile/print'); // Data dari MikroTik
+        $profiles_map_by_name_mikrotik = [];
+        foreach ($all_profiles_mikrotik as $profile) {
+            $profiles_map_by_name_mikrotik[$profile['name']] = $profile;
+        }
+
+        // --- PERBAIKAN: Ambil data pelanggan, profil, dan wilayah dari database SQL secara global ---
+        $pdo = connect_db();
+
+        // Ambil semua pelanggan dari DB
+        $stmt_customers = $pdo->query("SELECT * FROM customers");
+        $all_customers_db = $stmt_customers->fetchAll(PDO::FETCH_ASSOC);
+
+        // Ambil semua profil dari DB
+        $stmt_profiles = $pdo->query("SELECT * FROM profiles");
+        $profiles = $stmt_profiles->fetchAll(PDO::FETCH_ASSOC); // Variabel $profiles ini akan digunakan di main_view.php
+
+        // Ambil semua wilayah dari DB
+        $stmt_regions = $pdo->query("SELECT * FROM regions");
+        $wilayah_list = $stmt_regions->fetchAll(PDO::FETCH_ASSOC); // Variabel $wilayah_list ini akan digunakan di main_view.php
+        // --- AKHIR PERBAIKAN GLOBAL FETCH ---
+
+
+        // Filter pelanggan dari database berdasarkan wilayah yang ditugaskan untuk 'penagih'
+        $filtered_customers_db = [];
+        if ($_SESSION['role'] === 'penagih') {
+            if (!empty($_SESSION['assigned_regions'])) {
+                foreach ($all_customers_db as $customer) {
+                    if (in_array($customer['wilayah'], $_SESSION['assigned_regions'])) {
+                        $filtered_customers_db[] = $customer;
+                    }
+                }
+            }
+        } else {
+            $filtered_customers_db = $all_customers_db; // Admin dan Teknisi melihat semua pelanggan dari DB
+        }
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $action = $_POST['action'];
             $admin_actions = ['add_user', 'edit_user', 'delete_user', 'disable_user', 'enable_user', 'add_profile', 'edit_profile', 'delete_profile', 'save_settings', 'add_app_user', 'edit_app_user', 'delete_app_user', 'add_wilayah', 'delete_wilayah', 'edit_wilayah', 'generate_invoices', 'cancel_payment', 'add_report', 'edit_report', 'delete_report']; // Added report actions
@@ -386,10 +494,12 @@ try {
             $is_allowed = false;
             if ($_SESSION['role'] === 'admin') {
                 $is_allowed = true; // Admin can do anything
-            } elseif ($_SESSION['role'] === 'penagih' && in_array($action, $penagih_actions)) {
-                $is_allowed = true;
-            } elseif ($_SESSION['role'] === 'teknisi' && in_array($action, $teknisi_actions)) { // Technicians can only do their specific actions
-                $is_allowed = true;
+            } elseif (in_array($_SESSION['role'], ['penagih', 'teknisi'])) { // Gabungkan penagih dan teknisi
+                if (in_array($action, $penagih_actions) && $_SESSION['role'] === 'penagih') {
+                    $is_allowed = true;
+                } elseif (in_array($action, $teknisi_actions) && $_SESSION['role'] === 'teknisi') {
+                    $is_allowed = true;
+                }
             }
 
 
@@ -397,26 +507,211 @@ try {
                  $_SESSION['message'] = ['type' => 'error', 'text' => 'Akses ditolak. Anda tidak memiliki izin untuk melakukan aksi ini.'];
             } else { /* ... Switch Case for Actions ... */
                  switch ($action) {
-                    case 'add_user': $comment = build_comment_string($_POST); $API->comm("/ppp/secret/add", ["name" => trim($_POST['user']), "password" => trim($_POST['password']), "service" => $_POST['service'], "profile" => $_POST['profile'], "comment" => $comment]); $_SESSION['message'] = ['type' => 'success', 'text' => "Pelanggan '{$_POST['user']}' berhasil ditambahkan."]; break;
-                    case 'edit_user': $comment = build_comment_string($_POST, 'edit_'); $update_data = [ ".id" => $_POST['edit_id'], "profile" => $_POST['edit_profile'], "comment" => $comment ]; if (!empty(trim($_POST['edit_password']))) { $update_data['password'] = trim($_POST['edit_password']); } $API->comm("/ppp/secret/set", $update_data); $_SESSION['message'] = ['type' => 'success', 'text' => 'Data pelanggan berhasil diperbarui.']; break;
-                    case 'delete_user': $API->comm("/ppp/secret/remove", ["numbers" => $_POST['id']]); $_SESSION['message'] = ['type' => 'success', 'text' => 'Pelanggan berhasil dihapus.']; break;
-                    case 'disable_user': $API->comm("/ppp/secret/disable", ["numbers" => $_POST['id']]); $_SESSION['message'] = ['type' => 'success', 'text' => 'Pelanggan berhasil dinonaktifkan.']; break;
-                    case 'enable_user': $API->comm("/ppp/secret/enable", ["numbers" => $_POST['id']]); $_SESSION['message'] = ['type' => 'success', 'text' => 'Pelanggan berhasil diaktifkan.']; break;
-                    case 'disconnect_user': $API->comm("/ppp/active/remove", ["numbers" => $_POST['id']]); $_SESSION['message'] = ['type' => 'success', 'text' => 'Koneksi pelanggan berhasil diputuskan.']; break;
-                    case 'add_profile': 
-                        $profile_comment = "TAGIHAN:" . ($_POST['tagihan'] ?? '');
-                        $API->comm("/ppp/profile/add", ["name" => $_POST['profile_name'], "rate-limit" => $_POST['rate_limit'], "local-address" => $_POST['local_address'], "remote-address" => $_POST['remote_address'], "comment" => $profile_comment]); 
-                        $_SESSION['message'] = ['type' => 'success', 'text' => 'Profil baru berhasil ditambahkan.']; break;
-                    case 'edit_profile': 
-                        $profile_comment = "TAGIHAN:" . ($_POST['edit_tagihan'] ?? '');
-                        $command_data = [
-                            ".id" => $_POST['edit_profile_id'],
-                            "rate-limit" => $_POST['edit_rate_limit'],
-                            "comment" => $profile_comment
+                    case 'add_user':
+                        // Tambah ke MikroTik
+                        $mikrotik_comment = build_comment_string($_POST);
+                        $API->comm("/ppp/secret/add", [
+                            "name" => trim($_POST['user']),
+                            "password" => trim($_POST['password']),
+                            "service" => $_POST['service'],
+                            "profile" => $_POST['profile'],
+                            "comment" => $mikrotik_comment
+                        ]);
+
+                        // Tambah ke Database MySQL
+                        $pdo = connect_db();
+                        $stmt = $pdo->prepare("INSERT INTO customers (username, password, profile_name, service, koordinat, wilayah, whatsapp, tgl_registrasi, tgl_tagihan) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                        $stmt->execute([
+                            trim($_POST['user']),
+                            password_hash(trim($_POST['password']), PASSWORD_DEFAULT), // Simpan hashed password di DB
+                            $_POST['profile'],
+                            $_POST['service'],
+                            $_POST['koordinat'] ?? null,
+                            $_POST['wilayah'] ?? null,
+                            $_POST['whatsapp'] ?? null,
+                            $_POST['registrasi'] ?? null,
+                            $_POST['tgl_tagihan'] ?? null
+                        ]);
+                        $_SESSION['message'] = ['type' => 'success', 'text' => "Pelanggan '{$_POST['user']}' berhasil ditambahkan."];
+                        break;
+                    case 'edit_user':
+                        $mikrotik_id = $_POST['mikrotik_id']; // ID MikroTik
+                        $customer_id_db = $_POST['customer_id_db']; // ID dari database kita
+
+                        // Update di MikroTik
+                        if (!empty($mikrotik_id)) { // Hanya update di MikroTik jika ID-nya ada
+                            $mikrotik_comment = build_comment_string($_POST, 'edit_');
+                            $update_data_mikrotik = [
+                                ".id" => $mikrotik_id,
+                                "profile" => $_POST['edit_profile'],
+                                "service" => $_POST['edit_service'], // Pastikan service juga diupdate di MikroTik
+                                "comment" => $mikrotik_comment
+                            ];
+                            if (!empty(trim($_POST['edit_password']))) {
+                                $update_data_mikrotik['password'] = trim($_POST['edit_password']);
+                            }
+                            $API->comm("/ppp/secret/set", $update_data_mikrotik);
+                        } else {
+                            error_log("WARNING: Attempted to edit user in MikroTik but mikrotik_id was empty. User: " . $_POST['edit_username']);
+                        }
+
+                        // Update di Database MySQL
+                        $pdo = connect_db();
+                        $sql_db = "UPDATE customers SET profile_name = ?, service = ?, koordinat = ?, wilayah = ?, whatsapp = ?, tgl_registrasi = ?, tgl_tagihan = ?";
+                        $params_db = [
+                            $_POST['edit_profile'],
+                            $_POST['edit_service'], // Pastikan ini ada di form edit
+                            $_POST['edit_koordinat'] ?? null,
+                            $_POST['edit_wilayah'] ?? null,
+                            $_POST['edit_whatsapp'] ?? null,
+                            $_POST['edit_registrasi'] ?? null,
+                            $_POST['edit_tgl_tagihan'] ?? null
                         ];
-                        $API->comm("/ppp/profile/set", $command_data); 
-                        $_SESSION['message'] = ['type' => 'success', 'text' => 'Profil berhasil diperbarui.']; break;
-                    case 'delete_profile': $API->comm("/ppp/profile/remove", ["numbers" => $_POST['id']]); $_SESSION['message'] = ['type' => 'success', 'text' => 'Profil berhasil dihapus.']; break;
+                        if (!empty(trim($_POST['edit_password']))) {
+                            $sql_db .= ", password = ?";
+                            $params_db[] = password_hash(trim($_POST['edit_password']), PASSWORD_DEFAULT);
+                        }
+                        $sql_db .= " WHERE id = ?";
+                        $params_db[] = $customer_id_db;
+                        $stmt_db = $pdo->prepare($sql_db);
+                        $stmt_db->execute($params_db);
+
+                        $_SESSION['message'] = ['type' => 'success', 'text' => 'Data pelanggan berhasil diperbarui.'];
+                        break;
+                    case 'delete_user':
+                        $mikrotik_id = $_POST['mikrotik_id']; // ID MikroTik
+                        $customer_id_db = $_POST['customer_id_db']; // ID dari database kita
+                        $username_to_delete = $_POST['username']; // Username pelanggan
+
+                        // Hapus dari MikroTik
+                        if (!empty($mikrotik_id)) { // Hanya hapus di MikroTik jika ID-nya ada
+                            $API->comm("/ppp/secret/remove", ["numbers" => $mikrotik_id]);
+                        } else {
+                            error_log("WARNING: Attempted to delete user from MikroTik but mikrotik_id was empty. User: " . $username_to_delete);
+                        }
+
+                        // Hapus dari Database MySQL
+                        $pdo = connect_db();
+                        $stmt_db = $pdo->prepare("DELETE FROM customers WHERE id = ?");
+                        $stmt_db->execute([$customer_id_db]);
+
+                        // Hapus juga tagihan yang terkait
+                        $stmt_invoices = $pdo->prepare("DELETE FROM invoices WHERE username = ?");
+                        $stmt_invoices->execute([$username_to_delete]);
+
+                        // Hapus juga laporan yang terkait
+                        $stmt_reports = $pdo->prepare("DELETE FROM reports WHERE customer_username = ?");
+                        $stmt_reports->execute([$username_to_delete]);
+
+                        $_SESSION['message'] = ['type' => 'success', 'text' => 'Pelanggan berhasil dihapus.'];
+                        break;
+                    case 'disable_user':
+                        $mikrotik_id = $_POST['mikrotik_id']; // ID MikroTik
+                        if (!empty($mikrotik_id)) {
+                            $API->comm("/ppp/secret/disable", ["numbers" => $mikrotik_id]);
+                            $_SESSION['message'] = ['type' => 'success', 'text' => 'Pelanggan berhasil dinonaktifkan.'];
+                        } else {
+                            $_SESSION['message'] = ['type' => 'error', 'text' => 'Gagal menonaktifkan: Pelanggan tidak ditemukan di MikroTik.'];
+                        }
+                        break;
+                    case 'enable_user':
+                        $mikrotik_id = $_POST['mikrotik_id']; // ID MikroTik
+                        if (!empty($mikrotik_id)) {
+                            $API->comm("/ppp/secret/enable", ["numbers" => $mikrotik_id]);
+                            $_SESSION['message'] = ['type' => 'success', 'text' => 'Pelanggan berhasil diaktifkan.'];
+                        } else {
+                            $_SESSION['message'] = ['type' => 'error', 'text' => 'Gagal mengaktifkan: Pelanggan tidak ditemukan di MikroTik.'];
+                        }
+                        break;
+                    case 'disconnect_user':
+                        $mikrotik_active_id = $_POST['mikrotik_active_id']; // ID sesi aktif dari MikroTik
+                        if (!empty($mikrotik_active_id)) {
+                            $API->comm("/ppp/active/remove", ["numbers" => $mikrotik_active_id]);
+                            $_SESSION['message'] = ['type' => 'success', 'text' => 'Koneksi pelanggan berhasil diputuskan.'];
+                        } else {
+                            $_SESSION['message'] = ['type' => 'error', 'text' => 'Gagal memutuskan koneksi: Sesi aktif tidak ditemukan.'];
+                        }
+                        break;
+                    case 'add_profile':
+                        // Tambah ke MikroTik
+                        $profile_comment = "TAGIHAN:" . ($_POST['tagihan'] ?? '');
+                        $API->comm("/ppp/profile/add", [
+                            "name" => $_POST['profile_name'],
+                            "rate-limit" => $_POST['rate_limit'],
+                            "local-address" => $_POST['local_address'],
+                            "remote-address" => $_POST['remote_address'],
+                            "comment" => $profile_comment
+                        ]);
+
+                        // Tambah ke Database MySQL
+                        $pdo = connect_db();
+                        $stmt = $pdo->prepare("INSERT INTO profiles (profile_name, rate_limit, local_address, remote_address, tagihan_amount) VALUES (?, ?, ?, ?, ?)");
+                        $stmt->execute([
+                            $_POST['profile_name'],
+                            $_POST['rate_limit'] ?? null,
+                            $_POST['local_address'] ?? null,
+                            $_POST['remote_address'] ?? null,
+                            $_POST['tagihan'] ?? 0
+                        ]);
+                        $_SESSION['message'] = ['type' => 'success', 'text' => 'Profil baru berhasil ditambahkan.'];
+                        break;
+                    case 'edit_profile':
+                        $mikrotik_profile_id = $_POST['edit_profile_id']; // ID Profil MikroTik
+                        $profile_id_db = $_POST['profile_id_db']; // ID Profil dari database kita
+
+                        // Update di MikroTik
+                        if (!empty($mikrotik_profile_id)) {
+                            $profile_comment = "TAGIHAN:" . ($_POST['edit_tagihan'] ?? '');
+                            $command_data_mikrotik = [
+                                ".id" => $mikrotik_profile_id,
+                                "rate-limit" => $_POST['edit_rate_limit'],
+                                "comment" => $profile_comment
+                            ];
+                            if (isset($_POST['edit_local_address'])) {
+                                $command_data_mikrotik['local-address'] = $_POST['edit_local_address'];
+                            }
+                            if (isset($_POST['edit_remote_address'])) {
+                                $command_data_mikrotik['remote-address'] = $_POST['edit_remote_address'];
+                            }
+                            $API->comm("/ppp/profile/set", $command_data_mikrotik);
+                        } else {
+                            error_log("WARNING: Attempted to edit profile in MikroTik but mikrotik_profile_id was empty. Profile DB ID: " . $profile_id_db);
+                        }
+
+                        // Update di Database MySQL
+                        $pdo = connect_db();
+                        $stmt_db = $pdo->prepare("UPDATE profiles SET rate_limit = ?, local_address = ?, remote_address = ?, tagihan_amount = ? WHERE id = ?");
+                        $stmt_db->execute([
+                            $_POST['edit_rate_limit'] ?? null,
+                            $_POST['edit_local_address'] ?? null,
+                            $_POST['edit_remote_address'] ?? null,
+                            $_POST['edit_tagihan'] ?? 0,
+                            $profile_id_db
+                        ]);
+                        $_SESSION['message'] = ['type' => 'success', 'text' => 'Profil berhasil diperbarui.'];
+                        break;
+                    case 'delete_profile':
+                        $mikrotik_profile_id = $_POST['mikrotik_profile_id']; // ID Profil MikroTik
+                        $profile_id_db = $_POST['profile_id_db']; // ID Profil dari database kita
+                        $profile_name_to_delete = $_POST['profile_name']; // Nama profil
+
+                        // Hapus dari MikroTik
+                        if (!empty($mikrotik_profile_id)) {
+                            $API->comm("/ppp/profile/remove", ["numbers" => $mikrotik_profile_id]);
+                        } else {
+                            error_log("WARNING: Attempted to delete profile from MikroTik but mikrotik_profile_id was empty. Profile: " . $profile_name_to_delete);
+                        }
+
+                        // Hapus dari Database MySQL
+                        $pdo = connect_db();
+                        $stmt_db = $pdo->prepare("DELETE FROM profiles WHERE id = ?");
+                        $stmt_db->execute([$profile_id_db]);
+
+                        // Opsional: Perbarui pelanggan yang menggunakan profil ini di DB
+                        // Atau tangani di UI untuk mencegah penghapusan jika ada pelanggan yang masih menggunakannya.
+                        // Untuk saat ini, kita biarkan saja pelanggan di DB memiliki profile_name yang tidak ada.
+                        $_SESSION['message'] = ['type' => 'success', 'text' => 'Profil berhasil dihapus.'];
+                        break;
                     case 'save_settings': 
                         // Gunakan fungsi save_app_settings baru
                         $new_settings = get_app_settings(); // Ambil pengaturan saat ini
@@ -443,11 +738,9 @@ try {
                         if (isset($_POST['tripay_private_key'])) {
                             $new_settings['tripay_private_key'] = $_POST['tripay_private_key'];
                         }
-                        if (isset($_POST['tripay_production_mode'])) {
-                            $new_settings['tripay_production_mode'] = isset($_POST['tripay_production_mode']) ? true : false;
-                        } else {
-                            $new_settings['tripay_production_mode'] = false; // If checkbox not sent, it's false
-                        }
+                        // Checkbox handling: if it's set in POST, it's true, otherwise false.
+                        $new_settings['tripay_production_mode'] = isset($_POST['tripay_production_mode']);
+                        
                         // Fonnte settings - Corrected variable names
                         if (isset($_POST['fonnte_api_key'])) {
                             $new_settings['fonnte_api_key'] = $_POST['fonnte_api_key'];
@@ -458,6 +751,16 @@ try {
                         if (isset($_POST['fonnte_base_url'])) {
                             $new_settings['fonnte_base_url'] = $_POST['fonnte_base_url'];
                         }
+                        // --- PERBAIKAN: Simpan pengaturan database baru ---
+                        if (isset($_POST['db_host'])) { $new_settings['db_host'] = $_POST['db_host']; }
+                        if (isset($_POST['db_name'])) { $new_settings['db_name'] = $_POST['db_name']; }
+                        if (isset($_POST['db_user'])) { $new_settings['db_user'] = $_POST['db_user']; }
+                        // Hanya update password jika tidak kosong
+                        if (isset($_POST['db_pass']) && !empty(trim($_POST['db_pass']))) {
+                            $new_settings['db_pass'] = trim($_POST['db_pass']);
+                        }
+                        if (isset($_POST['db_port'])) { $new_settings['db_port'] = $_POST['db_port']; }
+                        // --- AKHIR PERBAIKAN ---
 
                         save_app_settings($new_settings);
                         $_SESSION['message'] = ['type' => 'success', 'text' => 'Pengaturan berhasil disimpan.']; 
@@ -481,7 +784,7 @@ try {
                         $sql = "UPDATE users SET username = ?, role = ?, full_name = ?, assigned_regions = ?";
                         $params = [$new_username, $new_role, $new_full_name, $assigned_regions];
 
-                        if (!empty($new_password)) {
+                        if (!empty(trim($_POST['new_password']))) { // Perbaikan: Gunakan 'new_password' dari form
                             $sql .= ", password = ?";
                             $params[] = password_hash($new_password, PASSWORD_DEFAULT);
                         }
@@ -493,20 +796,26 @@ try {
                         $_SESSION['message'] = ['type' => 'success', 'text' => 'Pengguna aplikasi berhasil diperbarui.'];
                         break;
                     case 'delete_app_user': $pdo = connect_db(); $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?"); $stmt->execute([$_POST['id']]); $_SESSION['message'] = ['type' => 'success', 'text' => 'Pengguna aplikasi berhasil dihapus.']; break;
-                    case 'add_wilayah': $wilayah_list = get_wilayah(); $wilayah_list[] = trim($_POST['nama_wilayah']); save_wilayah(array_unique($wilayah_list)); $_SESSION['message'] = ['type' => 'success', 'text' => 'Wilayah baru berhasil ditambahkan.']; break;
-                    case 'edit_wilayah': // New case for editing wilayah
-                        $wilayah_list = get_wilayah();
+                    case 'add_wilayah': // Wilayah sekarang disimpan di database
+                        $pdo = connect_db();
+                        $stmt = $pdo->prepare("INSERT INTO regions (region_name) VALUES (?)");
+                        $stmt->execute([trim($_POST['nama_wilayah'])]);
+                        $_SESSION['message'] = ['type' => 'success', 'text' => 'Wilayah baru berhasil ditambahkan.'];
+                        break;
+                    case 'edit_wilayah': // Wilayah sekarang disimpan di database
+                        $pdo = connect_db();
                         $wilayah_id = $_POST['wilayah_id'];
                         $new_name = trim($_POST['edit_nama_wilayah']);
-                        if (isset($wilayah_list[$wilayah_id])) {
-                            $wilayah_list[$wilayah_id] = $new_name;
-                            save_wilayah(array_values($wilayah_list)); // Re-index array after update
-                            $_SESSION['message'] = ['type' => 'success', 'text' => 'Wilayah berhasil diperbarui.'];
-                        } else {
-                            $_SESSION['message'] = ['type' => 'error', 'text' => 'Wilayah tidak ditemukan.'];
-                        }
+                        $stmt = $pdo->prepare("UPDATE regions SET region_name = ? WHERE id = ?");
+                        $stmt->execute([$new_name, $wilayah_id]);
+                        $_SESSION['message'] = ['type' => 'success', 'text' => 'Wilayah berhasil diperbarui.'];
                         break;
-                    case 'delete_wilayah': $wilayah_list = get_wilayah(); unset($wilayah_list[$_POST['id']]); save_wilayah(array_values($wilayah_list)); $_SESSION['message'] = ['type' => 'success', 'text' => 'Wilayah berhasil dihapus.']; break;
+                    case 'delete_wilayah': // Wilayah sekarang disimpan di database
+                        $pdo = connect_db();
+                        $stmt = $pdo->prepare("DELETE FROM regions WHERE id = ?");
+                        $stmt->execute([$_POST['id']]);
+                        $_SESSION['message'] = ['type' => 'success', 'text' => 'Wilayah berhasil dihapus.'];
+                        break;
                     
                     case 'add_report': // New: Add a new report
                         $pdo = connect_db();
@@ -540,7 +849,7 @@ try {
                         $resolved_at = ($new_status === 'Resolved') ? date('Y-m-d H:i:s') : NULL;
                         // For technicians, they can only update status of reports assigned to them
                         // The assigned_to field is a JSON string, so we need to check if their username is in it
-                        $stmt = $pdo->prepare("UPDATE reports SET report_status = ?, updated_at = CURRENT_TIMESTAMP, resolved_at = ? WHERE id = ? AND INSTR(assigned_to, ?)"); // Using INSTR for simplicity
+                        $stmt = $pdo->prepare("UPDATE reports SET report_status = ?, updated_at = CURRENT_TIMESTAMP, resolved_at = ? WHERE id = ? AND JSON_CONTAINS(assigned_to, JSON_QUOTE(?))"); // Menggunakan JSON_CONTAINS untuk MySQL
                         $stmt->execute([$new_status, $resolved_at, $report_id, $_SESSION['username']]);
                         $_SESSION['message'] = ['type' => 'success', 'text' => 'Status laporan berhasil diperbarui.'];
                         break;
@@ -569,51 +878,105 @@ try {
                         break;
                     
                     case 'generate_invoices':
-                        global $all_secrets; // Use the global all_secrets
-                        $secrets_for_generation = $all_secrets; // Use all secrets for generation
-                        $profiles = $API->comm('/ppp/profile/print');
-                        $profiles_map = [];
-                        foreach ($profiles as $profile) {
-                            $profiles_map[$profile['name']] = $profile;
-                        }
+                        global $all_customers_db; // Gunakan data pelanggan dari DB
+                        global $profiles_map_by_name_mikrotik; // Gunakan profil dari MikroTik
+                        global $all_secrets_mikrotik; // Perlu untuk cek status disabled
+
+                        error_log("DEBUG: --- Starting Invoice Generation ---");
+                        error_log("DEBUG: Total customers from DB: " . count($all_customers_db));
+                        error_log("DEBUG: Total profiles from MikroTik: " . count($profiles_map_by_name_mikrotik));
 
                         $pdo = connect_db();
-                        $stmt = $pdo->prepare("INSERT OR IGNORE INTO invoices (user_secret_id, username, profile_name, billing_month, amount, due_date) VALUES (?, ?, ?, ?, ?, ?)");
+                        $stmt_insert_invoice = $pdo->prepare("INSERT INTO invoices (user_secret_id, username, profile_name, billing_month, amount, due_date) VALUES (?, ?, ?, ?, ?, ?)");
                         
                         $billing_month = date('Y-m');
                         $generated_count = 0;
-                        foreach ($secrets_for_generation as $secret) { // Loop through all secrets
-                            if (isset($secret['disabled']) && $secret['disabled'] === 'true') continue;
+                        $skipped_count = 0;
+                        $skipped_no_price = 0;
+                        $skipped_no_duedate = 0;
+                        $skipped_disabled = 0; 
 
-                            $profile_name = $secret['profile'];
-                            if (isset($profiles_map[$profile_name])) {
-                                $profile_details = $profiles_map[$profile_name];
-                                $comment_data = parse_comment_string($profile_details['comment'] ?? '');
-                                $secret_comment_data = parse_comment_string($secret['comment'] ?? '');
-                                
-                                $amount = filter_var($comment_data['tagihan'], FILTER_SANITIZE_NUMBER_INT);
-                                $due_day = filter_var($secret_comment_data['tgl_tagihan'], FILTER_SANITIZE_NUMBER_INT);
-                                $customer_whatsapp = parse_comment_for_wa($secret['comment'] ?? ''); // Get customer WA number
+                        foreach ($all_customers_db as $customer) { // Loop melalui pelanggan dari database
+                            error_log("DEBUG: Processing customer from DB: " . ($customer['username'] ?? 'N/A') . ", ID: " . ($customer['id'] ?? 'N/A'));
 
-                                if (!empty($amount) && !empty($due_day)) {
-                                    $due_date = date('Y-m-d', strtotime("{$billing_month}-{$due_day}"));
-                                    $stmt->execute([$secret['.id'], $secret['name'], $profile_name, $billing_month, $amount, $due_date]);
-                                    if ($stmt->rowCount() > 0) {
-                                        $generated_count++;
-                                        // Send WhatsApp notification for new invoice
-                                        if ($customer_whatsapp) {
-                                            $message = "Halo pelanggan " . $secret['name'] . ",\n";
-                                            $message .= "Tagihan internet Anda untuk bulan " . date('F Y', strtotime($billing_month . '-01')) . " sebesar Rp " . number_format($amount, 0, ',', '.') . " akan jatuh tempo pada tanggal " . date('d F Y', strtotime($due_date)) . ".\n";
-                                            $message .= "Silakan cek tagihan Anda di " . (isset($_SERVER['HTTPS']) ? "https" : "http") . "://" . $_SERVER['HTTP_HOST'] . "/cek_tagihan.php\n";
-                                            $message .= "Terima kasih.";
-                                            sendWhatsAppMessage($customer_whatsapp, $message);
-                                        }
-                                    }
+                            // Dapatkan status disabled dari MikroTik secara real-time
+                            $mikrotik_secret = null;
+                            foreach($all_secrets_mikrotik as $ms) {
+                                if ($ms['name'] === $customer['username']) {
+                                    $mikrotik_secret = $ms;
+                                    break;
                                 }
                             }
+
+                            if ($mikrotik_secret && isset($mikrotik_secret['disabled']) && $mikrotik_secret['disabled'] === 'true') {
+                                $skipped_disabled++;
+                                error_log("DEBUG: Skipping disabled user (from MikroTik): " . ($customer['username'] ?? 'N/A'));
+                                continue;
+                            }
+
+                            $profile_name = $customer['profile_name'] ?? null;
+                            if (!$profile_name || !isset($profiles_map_by_name_mikrotik[$profile_name])) {
+                                error_log("DEBUG: Skipping customer " . ($customer['username'] ?? 'N/A') . " - Profile '" . ($profile_name ?? 'N/A') . "' not found in MikroTik profiles.");
+                                $skipped_count++;
+                                continue;
+                            }
+                            
+                            $profile_details_mikrotik = $profiles_map_by_name_mikrotik[$profile_name];
+                            $profile_comment_data = parse_comment_string($profile_details_mikrotik['comment'] ?? '');
+                            
+                            $amount = filter_var($profile_comment_data['tagihan'] ?? '', FILTER_SANITIZE_NUMBER_INT);
+                            $due_day = filter_var($customer['tgl_tagihan'] ?? '', FILTER_SANITIZE_NUMBER_INT); // Ambil tgl_tagihan dari DB
+
+                            error_log("DEBUG: Customer: " . ($customer['username'] ?? 'N/A') . ", Profile (DB): " . $profile_name . ", Parsed Amount (from MikroTik Profile Comment): " . $amount);
+                            error_log("DEBUG: Parsed Due Day (from DB): " . $due_day);
+
+                            if (empty($amount) || $amount <= 0) {
+                                $skipped_no_price++;
+                                error_log("DEBUG: Skipping customer " . ($customer['username'] ?? 'N/A') . " - Invalid or empty amount: " . $amount);
+                                continue;
+                            }
+                            if (empty($due_day) || $due_day < 1 || $due_day > 31) {
+                                $skipped_no_duedate++;
+                                error_log("DEBUG: Skipping customer " . ($customer['username'] ?? 'N/A') . " - Invalid or empty due day: " . $due_day);
+                                continue;
+                            }
+
+                            $due_date = date('Y-m-d', strtotime("{$billing_month}-{$due_day}"));
+                            
+                            try {
+                                // user_secret_id di invoices akan menjadi ID dari tabel customers
+                                $stmt_insert_invoice->execute([$customer['id'], $customer['username'], $profile_name, $billing_month, $amount, $due_date]);
+                                if ($stmt_insert_invoice->rowCount() > 0) {
+                                    $generated_count++;
+                                    error_log("DEBUG: Invoice generated for " . $customer['username'] . " for month " . $billing_month);
+                                    // Send WhatsApp notification for new invoice
+                                    if ($customer['whatsapp']) { // Gunakan nomor WA dari DB
+                                        $payment_link = (isset($_SERVER['HTTPS']) ? "https" : "http") . "://" . $_SERVER['HTTP_HOST'] . "/cek_tagihan.php?u=" . urlencode($customer['username']);
+                                        $message_wa = "Halo pelanggan " . $customer['username'] . ",\n";
+                                        $message_wa .= "Tagihan internet Anda untuk bulan " . date('F Y', strtotime($billing_month . '-01')) . " sebesar Rp " . number_format($amount, 0, ',', '.') . " akan jatuh tempo pada tanggal " . date('d F Y', strtotime($due_date)) . ".\n";
+                                        $message_wa .= "Silakan cek dan bayar tagihan Anda di: " . $payment_link . "\n";
+                                        $message_wa .= "Terima kasih.";
+                                        sendWhatsAppMessage($customer['whatsapp'], $message_wa);
+                                        error_log("DEBUG: WA message sent to " . $customer['whatsapp'] . " for " . $customer['username']);
+                                    } else {
+                                        error_log("DEBUG: No WA number found for " . $customer['username'] . " in DB, skipping message.");
+                                    }
+                                } else {
+                                    error_log("DEBUG: Invoice for " . $customer['username'] . " for month " . $billing_month . " already exists (ignored).");
+                                    $skipped_count++; // Increment skipped count if ignored due to UNIQUE constraint
+                                }
+                            } catch (PDOException $e) {
+                                error_log("ERROR: Database error during invoice generation for " . ($customer['username'] ?? 'N/A') . ": " . $e->getMessage());
+                                $skipped_count++;
+                            }
                         }
-                        $_SESSION['message'] = ['type' => 'success', 'text' => "$generated_count tagihan baru untuk bulan " . date('F Y') . " berhasil dibuat."];
-                        error_log("DEBUG: Invoices generated: " . $generated_count); // Debug log
+                        $_SESSION['message'] = [
+                            'type' => 'success', 
+                            'text' => "$generated_count tagihan baru untuk bulan " . date('F Y') . " berhasil dibuat. " .
+                                      "($skipped_count dilewati karena sudah ada/error, $skipped_no_price dilewati karena harga kosong, $skipped_no_duedate dilewati karena tanggal jatuh tempo kosong, $skipped_disabled dilewati karena pelanggan nonaktif)."
+                        ];
+                        error_log("DEBUG: --- Invoice Generation Finished ---");
+                        error_log("DEBUG: Summary - Generated: $generated_count, Skipped (existing/error): $skipped_count, Skipped (no price): $skipped_no_price, Skipped (no due date): $skipped_no_duedate, Skipped (disabled): $skipped_disabled");
                         break;
 
                     case 'mark_as_paid':
@@ -621,7 +984,7 @@ try {
                         $payment_method = $_POST['payment_method'];
                         $pdo = connect_db();
                         
-                        $stmt_invoice = $pdo->prepare("SELECT username, amount, billing_month FROM invoices WHERE id = ?"); // Ambil billing_month juga
+                        $stmt_invoice = $pdo->prepare("SELECT username, amount, billing_month, user_secret_id FROM invoices WHERE id = ?"); // Ambil user_secret_id juga
                         $stmt_invoice->execute([$invoice_id]);
                         $invoice = $stmt_invoice->fetch(PDO::FETCH_ASSOC);
 
@@ -629,37 +992,44 @@ try {
                             $username_to_enable = $invoice['username'];
                             $invoice_amount = $invoice['amount']; // Ambil amount
                             $billing_month = $invoice['billing_month']; // Ambil billing_month
+                            $customer_id_db = $invoice['user_secret_id']; // Ini adalah ID pelanggan di DB
 
                             $stmt = $pdo->prepare("UPDATE invoices SET status = 'Lunas', paid_date = ?, updated_by = ?, payment_method = ? WHERE id = ?");
                             $stmt->execute([date('Y-m-d H:i:s'), $_SESSION['full_name'], $payment_method, $invoice_id]);
 
-                            // Use $all_secrets to find the customer's WhatsApp number
-                            $customer_whatsapp = null;
-                            foreach ($all_secrets as $secret_item) {
-                                if ($secret_item['name'] === $username_to_enable) {
-                                    $customer_whatsapp = parse_comment_for_wa($secret_item['comment'] ?? '');
-                                    // Check if disabled and enable
-                                    if (isset($secret_item['disabled']) && $secret_item['disabled'] === 'true') {
-                                        $secret_id = $secret_item['.id'];
-                                        $API->comm("/ppp/secret/enable", ["numbers" => $secret_id]);
-                                        $_SESSION['message'] = ['type' => 'success', 'text' => 'Tagihan lunas & pelanggan ' . htmlspecialchars($username_to_enable) . ' telah diaktifkan kembali.'];
-                                    } else {
-                                        $_SESSION['message'] = ['type' => 'success', 'text' => 'Tagihan berhasil ditandai lunas.'];
-                                    }
+                            // Dapatkan nomor WA dari database pelanggan
+                            $stmt_customer_wa = $pdo->prepare("SELECT whatsapp FROM customers WHERE id = ?");
+                            $stmt_customer_wa->execute([$customer_id_db]);
+                            $customer_data_db = $stmt_customer_wa->fetch(PDO::FETCH_ASSOC);
+                            $customer_whatsapp = $customer_data_db['whatsapp'] ?? null;
+
+                            // Cek status disabled di MikroTik dan enable jika perlu
+                            $mikrotik_secret = null;
+                            foreach($all_secrets_mikrotik as $ms) {
+                                if ($ms['name'] === $username_to_enable) {
+                                    $mikrotik_secret = $ms;
                                     break;
                                 }
                             }
+
+                            if ($mikrotik_secret && isset($mikrotik_secret['disabled']) && $mikrotik_secret['disabled'] === 'true') {
+                                $API->comm("/ppp/secret/enable", ["numbers" => $mikrotik_secret['.id']]);
+                                $_SESSION['message'] = ['type' => 'success', 'text' => 'Tagihan lunas & pelanggan ' . htmlspecialchars($username_to_enable) . ' telah diaktifkan kembali.'];
+                            } else {
+                                $_SESSION['message'] = ['type' => 'success', 'text' => 'Tagihan berhasil ditandai lunas.'];
+                            }
+
                             if ($customer_whatsapp === null) {
-                                $_SESSION['message'] = ['type' => 'warning', 'text' => 'Tagihan berhasil ditandai lunas, namun pelanggan tidak ditemukan di MikroTik atau nomor WA tidak ada.'];
+                                $_SESSION['message'] = ['type' => 'warning', 'text' => 'Tagihan berhasil ditandai lunas, namun nomor WA pelanggan tidak ditemukan di database.'];
                             }
 
 
                             // Send WhatsApp confirmation for payment
                             if ($customer_whatsapp) {
-                                $message = "Halo pelanggan " . $username_to_enable . ",\n";
-                                $message .= "Pembayaran tagihan internet Anda untuk bulan " . date('F Y', strtotime($billing_month . '-01')) . " sebesar Rp " . number_format($invoice_amount, 0, ',', '.') . " telah berhasil dikonfirmasi.\n";
-                                $message .= "Terima kasih atas pembayaran Anda!";
-                                sendWhatsAppMessage($customer_whatsapp, $message);
+                                $message_wa = "Halo pelanggan " . $username_to_enable . ",\n";
+                                $message_wa .= "Pembayaran tagihan internet Anda untuk bulan " . date('F Y', strtotime($billing_month . '-01')) . " sebesar Rp " . number_format($invoice_amount, 0, ',', '.') . " telah berhasil dikonfirmasi.\n";
+                                $message_wa .= "Terima kasih atas pembayaran Anda!";
+                                sendWhatsAppMessage($customer_whatsapp, $message_wa);
                             }
 
                         } else {
@@ -703,54 +1073,43 @@ try {
         }
 
         // Data Fetching Logic
-        // Pre-fetch all secrets and profiles once if needed by multiple pages,
-        // and build a map for efficient lookup.
-        $all_secrets = $API->comm('/ppp/secret/print');
-        $all_profiles = $API->comm('/ppp/profile/print');
-        $profiles_map_by_name = [];
-        foreach ($all_profiles as $profile) {
-            $profiles_map_by_name[$profile['name']] = $profile;
-        }
+        // These are now pre-fetched before the POST action block.
+        // $all_secrets = $API->comm('/ppp/secret/print'); // Diganti dengan $all_secrets_mikrotik
+        // $all_profiles = $API->comm('/ppp/profile/print'); // Diganti dengan $all_profiles_mikrotik
+        // $profiles_map_by_name = []; // Diganti dengan $profiles_map_by_name_mikrotik
 
-        // Filter secrets based on assigned regions for 'penagih' role
-        $filtered_secrets = [];
-        if ($_SESSION['role'] === 'penagih') { // Only apply region filter for 'penagih'
-            if (!empty($_SESSION['assigned_regions'])) {
-                foreach ($all_secrets as $secret) {
-                    $comment_data = parse_comment_string($secret['comment'] ?? '');
-                    $customer_wilayah = $comment_data['wilayah'] ?? '';
-                    if (in_array($customer_wilayah, $_SESSION['assigned_regions'])) {
-                        $filtered_secrets[] = $secret;
-                    }
-                }
-            } else {
-                // If penagih has no assigned regions, they see nothing.
-                // $filtered_secrets remains an empty array.
-            }
-        } else {
-            $filtered_secrets = $all_secrets; // Admin and Teknisi see all
-        }
+        // $filtered_secrets = []; // Diganti dengan $filtered_customers_db
 
-
+        // --- PERBAIKAN: Menggabungkan semua blok pengambilan data halaman menjadi satu if/elseif chain yang benar ---
         if ($page === 'dashboard') { // Dashboard Admin
-            $secrets = $all_secrets; // Admin dashboard shows all secrets
+            $secrets = $all_customers_db; // Dashboard Admin menunjukkan semua pelanggan dari DB
             $active_sessions = $API->comm('/ppp/active/print');
-            $profiles = $all_profiles;
+            // $profiles = $all_profiles_mikrotik; // Profil sekarang dari DB, tapi untuk dashboard ini tidak perlu $profiles
+            // Kita pakai $profiles_map_by_name_mikrotik untuk ambil harga dari MikroTik profile
 
-            $total_secrets = count($secrets);
+            $total_customers_db = count($secrets);
             $total_active = 0;
             $total_disabled = 0;
             $active_usernames = array_column($active_sessions, 'name');
             $active_usernames_map = array_flip($active_usernames);
 
-            foreach ($secrets as $secret) {
-                if (isset($secret['disabled']) && $secret['disabled'] === 'true') {
+            foreach ($secrets as $customer_db_item) {
+                // Cek status disabled dari MikroTik
+                $mikrotik_secret_status = null;
+                foreach($all_secrets_mikrotik as $ms) {
+                    if ($ms['name'] === $customer_db_item['username']) {
+                        $mikrotik_secret_status = $ms;
+                        break;
+                    }
+                }
+
+                if ($mikrotik_secret_status && isset($mikrotik_secret_status['disabled']) && $mikrotik_secret_status['disabled'] === 'true') {
                     $total_disabled++;
-                } elseif (isset($active_usernames_map[$secret['name']])) {
+                } elseif (isset($active_usernames_map[$customer_db_item['username']])) {
                     $total_active++;
                 }
             }
-            $total_offline = $total_secrets - $total_active - $total_disabled;
+            $total_offline = $total_customers_db - $total_active - $total_disabled;
 
             // Financial Summary for Admin Dashboard (all invoices)
             $pdo = connect_db();
@@ -760,42 +1119,70 @@ try {
             $monthly_totals = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
             $uang_lunas = $monthly_totals['Lunas'] ?? 0;
             $uang_belum_bayar = $monthly_totals['Belum Lunas'] ?? 0;
+            
             $uang_libur = 0; // Admin dashboard does not calculate uang_libur based on filtered secrets
-            foreach($all_secrets as $secret) {
-                 $price = $profiles_map_by_name[$secret['profile']]['comment'] ?? '';
-                 $price = filter_var(parse_comment_string($price)['tagihan'], FILTER_SANITIZE_NUMBER_INT) ?? 0;
-                 if ($price > 0 && (isset($secret['disabled']) && $secret['disabled'] === 'true')) {
-                     $uang_libur += $price;
-                 }
+            foreach($all_customers_db as $customer_db_item) {
+                // Dapatkan harga tagihan dari profil MikroTik
+                $price = 0;
+                if (isset($profiles_map_by_name_mikrotik[$customer_db_item['profile_name']])) {
+                    $profile_comment = $profiles_map_by_name_mikrotik[$customer_db_item['profile_name']]['comment'] ?? '';
+                    $price = filter_var(parse_comment_string($profile_comment)['tagihan'], FILTER_SANITIZE_NUMBER_INT) ?? 0;
+                }
+                
+                // Cek status disabled dari MikroTik
+                $mikrotik_secret_status = null;
+                foreach($all_secrets_mikrotik as $ms) {
+                    if ($ms['name'] === $customer_db_item['username']) {
+                        $mikrotik_secret_status = $ms;
+                        break;
+                    }
+                }
+
+                if ($price > 0 && ($mikrotik_secret_status && isset($mikrotik_secret_status['disabled']) && $mikrotik_secret_status['disabled'] === 'true')) {
+                    $uang_libur += $price;
+                }
             }
-            $total_uang = 0; // Admin dashboard total potential income
-            foreach($all_secrets as $secret) {
-                $price = $profiles_map_by_name[$secret['profile']]['comment'] ?? '';
-                $price = filter_var(parse_comment_string($price)['tagihan'], FILTER_SANITIZE_NUMBER_INT) ?? 0;
+            $total_uang = 0; // Total potential income for penagih based on filtered secrets
+            foreach($all_customers_db as $customer_db_item) {
+                $price = 0;
+                if (isset($profiles_map_by_name_mikrotik[$customer_db_item['profile_name']])) {
+                    $profile_comment = $profiles_map_by_name_mikrotik[$customer_db_item['profile_name']]['comment'] ?? '';
+                    $price = filter_var(parse_comment_string($profile_comment)['tagihan'], FILTER_SANITIZE_NUMBER_INT) ?? 0;
+                }
                 if ($price > 0) {
                     $total_uang += $price;
                 }
             }
 
         } elseif ($page === 'penagih_dashboard') { // Dashboard Penagih
-            $secrets = $filtered_secrets; // Penagih dashboard uses filtered secrets
+            $secrets = $filtered_customers_db; // Penagih dashboard menggunakan pelanggan yang sudah difilter dari DB
             $active_sessions = $API->comm('/ppp/active/print');
-            $profiles = $all_profiles; // Still need all profiles for price lookup
+            // $profiles = $all_profiles_mikrotik; // Profil tetap dari MikroTik, tapi untuk dashboard ini tidak perlu $profiles
+            // Kita pakai $profiles_map_by_name_mikrotik untuk ambil harga dari MikroTik profile
 
-            $total_secrets = count($secrets);
+            $total_customers_db = count($secrets);
             $total_active = 0;
             $total_disabled = 0;
             $active_usernames = array_column($active_sessions, 'name');
             $active_usernames_map = array_flip($active_usernames);
 
-            foreach ($secrets as $secret) {
-                if (isset($secret['disabled']) && $secret['disabled'] === 'true') {
+            foreach ($secrets as $customer_db_item) {
+                // Cek status disabled dari MikroTik
+                $mikrotik_secret_status = null;
+                foreach($all_secrets_mikrotik as $ms) {
+                    if ($ms['name'] === $customer_db_item['username']) {
+                        $mikrotik_secret_status = $ms;
+                        break;
+                    }
+                }
+
+                if ($mikrotik_secret_status && isset($mikrotik_secret_status['disabled']) && $mikrotik_secret_status['disabled'] === 'true') {
                     $total_disabled++;
-                } elseif (isset($active_usernames_map[$secret['name']])) {
+                } elseif (isset($active_usernames_map[$customer_db_item['username']])) {
                     $total_active++;
                 }
             }
-            $total_offline = $total_secrets - $total_active - $total_disabled;
+            $total_offline = $total_customers_db - $total_active - $total_disabled;
 
             // Financial Summary for Penagih Dashboard (filtered invoices)
             $pdo = connect_db();
@@ -804,11 +1191,11 @@ try {
             $invoice_where_clauses = ["billing_month = ?"];
             $invoice_params = [$current_month];
 
-            $filtered_secret_names = array_column($filtered_secrets, 'name');
-            if (!empty($filtered_secret_names)) {
-                $username_placeholders = implode(',', array_fill(0, count($filtered_secret_names), '?'));
+            $filtered_customer_usernames_db = array_column($filtered_customers_db, 'username');
+            if (!empty($filtered_customer_usernames_db)) {
+                $username_placeholders = implode(',', array_fill(0, count($filtered_customer_usernames_db), '?'));
                 $invoice_where_clauses[] = "username IN ($username_placeholders)";
-                $invoice_params = array_merge($invoice_params, $filtered_secret_names);
+                $invoice_params = array_merge($invoice_params, $filtered_customer_usernames_db);
             } else {
                 $invoice_where_clauses[] = "1 = 0"; // Force no results if no assigned regions or no customers in them
             }
@@ -820,17 +1207,33 @@ try {
             $uang_belum_bayar = $monthly_totals['Belum Lunas'] ?? 0; // Corrected variable name
 
             $uang_libur = 0; // Calculated based on filtered secrets
-            foreach($secrets as $secret) {
-                $price = $profiles_map_by_name[$secret['profile']]['comment'] ?? '';
-                $price = filter_var(parse_comment_string($price)['tagihan'], FILTER_SANITIZE_NUMBER_INT) ?? 0;
-                if ($price > 0 && (isset($secret['disabled']) && $secret['disabled'] === 'true')) {
+            foreach($secrets as $customer_db_item) {
+                $price = 0;
+                if (isset($profiles_map_by_name_mikrotik[$customer_db_item['profile_name']])) {
+                    $profile_comment = $profiles_map_by_name_mikrotik[$customer_db_item['profile_name']]['comment'] ?? '';
+                    $price = filter_var(parse_comment_string($profile_comment)['tagihan'], FILTER_SANITIZE_NUMBER_INT) ?? 0;
+                }
+                
+                // Cek status disabled dari MikroTik
+                $mikrotik_secret_status = null;
+                foreach($all_secrets_mikrotik as $ms) {
+                    if ($ms['name'] === $customer_db_item['username']) {
+                        $mikrotik_secret_status = $ms;
+                        break;
+                    }
+                }
+
+                if ($price > 0 && ($mikrotik_secret_status && isset($mikrotik_secret_status['disabled']) && $mikrotik_secret_status['disabled'] === 'true')) {
                     $uang_libur += $price;
                 }
             }
             $total_uang = 0; // Total potential income for penagih based on filtered secrets
-            foreach($secrets as $secret) {
-                $price = $profiles_map_by_name[$secret['profile']]['comment'] ?? '';
-                $price = filter_var(parse_comment_string($price)['tagihan'], FILTER_SANITIZE_NUMBER_INT) ?? 0;
+            foreach($secrets as $customer_db_item) {
+                $price = 0;
+                if (isset($profiles_map_by_name_mikrotik[$customer_db_item['profile_name']])) {
+                    $profile_comment = $profiles_map_by_name_mikrotik[$customer_db_item['profile_name']]['comment'] ?? '';
+                    $price = filter_var(parse_comment_string($profile_comment)['tagihan'], FILTER_SANITIZE_NUMBER_INT) ?? 0;
+                }
                 if ($price > 0) {
                     $total_uang += $price;
                 }
@@ -838,72 +1241,142 @@ try {
 
         } elseif ($page === 'pelanggan') {
             $active_sessions = $API->comm('/ppp/active/print'); 
-            $secrets = $filtered_secrets; // Use filtered secrets for pelanggan page
-            $profiles = $all_profiles; 
-            $wilayah_list = get_wilayah(); // Still need all wilayah for the filter dropdown
+            $secrets = $filtered_customers_db; // Gunakan pelanggan dari DB yang sudah difilter
+            // $profiles = $all_profiles_mikrotik; // Profil dari MikroTik, tidak digunakan langsung di sini
+            
+            // Ambil wilayah dari database (sudah diambil secara global)
+            // $pdo = connect_db();
+            // $stmt_regions = $pdo->query("SELECT id, region_name FROM regions");
+            // $wilayah_list = $stmt_regions->fetchAll(PDO::FETCH_ASSOC); // Sudah ada secara global
+
             $active_usernames = array_column($active_sessions, 'name'); 
             $active_usernames_map = array_flip($active_usernames);
             
-            $total_secrets = count($secrets);
+            $total_customers_db = count($secrets);
             $total_active = 0;
             $total_disabled = 0;
-            foreach ($secrets as $secret) {
-                if (isset($secret['disabled']) && $secret['disabled'] === 'true') {
+            foreach ($secrets as $customer_db_item) {
+                 // Cek status disabled dari MikroTik
+                $mikrotik_secret_status = null;
+                foreach($all_secrets_mikrotik as $ms) {
+                    if ($ms['name'] === $customer_db_item['username']) {
+                        $mikrotik_secret_status = $ms;
+                        break;
+                    }
+                }
+
+                if ($mikrotik_secret_status && isset($mikrotik_secret_status['disabled']) && $mikrotik_secret_status['disabled'] === 'true') {
                     $total_disabled++;
-                } elseif (isset($active_usernames_map[$secret['name']])) {
+                } elseif (isset($active_usernames_map[$customer_db_item['username']])) {
                     $total_active++;
                 }
             }
-            $total_offline = $total_secrets - $total_active - $total_disabled;
+            $total_offline = $total_customers_db - $total_active - $total_disabled;
 
             $filter = $_GET['filter'] ?? 'all'; $search = $_GET['search'] ?? ''; $display_secrets = []; $table_title = "Semua Pelanggan";
             $filtered_by_status = [];
-            switch ($filter) {
-                case 'active': $table_title = "Pelanggan Aktif (Online)"; foreach ($secrets as $secret) { if (isset($active_usernames_map[$secret['name']]) && (!isset($secret['disabled']) || $secret['disabled'] !== 'true')) { $filtered_by_status[] = $secret; } } break;
-                case 'disabled': $table_title = "Pelanggan Nonaktif (Disabled)"; foreach ($secrets as $secret) { if (isset($secret['disabled']) && $secret['disabled'] === 'true') { $filtered_by_status[] = $secret; } } break;
-                case 'offline': $table_title = "Pelanggan Offline"; foreach ($secrets as $secret) { if ((!isset($secret['disabled']) || $secret['disabled'] !== 'true') && !isset($active_usernames_map[$secret['name']])) { $filtered_by_status[] = $secret; } } break;
-                default: $filtered_by_status = $secrets; break;
+            
+            foreach ($secrets as $customer_db_item) {
+                $is_disabled_mikrotik = false;
+                $is_online_mikrotik = false;
+                $is_in_mikrotik = false; // Tambahkan flag untuk cek apakah ada di MikroTik
+
+                // Dapatkan status dari MikroTik
+                $mikrotik_secret_status = null;
+                foreach($all_secrets_mikrotik as $ms) {
+                    if ($ms['name'] === $customer_db_item['username']) {
+                        $mikrotik_secret_status = $ms;
+                        $is_in_mikrotik = true;
+                        break;
+                    }
+                }
+
+                if ($mikrotik_secret_status && isset($mikrotik_secret_status['disabled']) && $mikrotik_secret_status['disabled'] === 'true') {
+                    $is_disabled_mikrotik = true;
+                } elseif (isset($active_usernames_map[$customer_db_item['username']])) {
+                    $is_online_mikrotik = true;
+                }
+
+                $match_status = false;
+                switch ($filter) {
+                    case 'active':
+                        if ($is_online_mikrotik && !$is_disabled_mikrotik) $match_status = true;
+                        break;
+                    case 'disabled':
+                        if ($is_disabled_mikrotik) $match_status = true;
+                        break;
+                    case 'offline':
+                        if (!$is_online_mikrotik && !$is_disabled_mikrotik && $is_in_mikrotik) $match_status = true; // Hanya offline jika ada di MikroTik
+                        break;
+                    case 'not_in_mikrotik': // Filter baru
+                        if (!$is_in_mikrotik) $match_status = true;
+                        break;
+                    default: // 'all'
+                        $match_status = true;
+                        break;
+                }
+
+                if ($match_status) {
+                    $filtered_by_status[] = $customer_db_item;
+                }
             }
-            if (!empty($search)) { $table_title .= " (Pencarian: '" . htmlspecialchars($search) . "')"; foreach ($filtered_by_status as $secret) { if (stripos($secret['name'], $search) !== false || stripos($secret['profile'], $search) !== false) { $display_secrets[] = $secret; } } } 
+
+            if (!empty($search)) { $table_title .= " (Pencarian: '" . htmlspecialchars($search) . "')"; foreach ($filtered_by_status as $customer_db_item) { if (stripos($customer_db_item['username'], $search) !== false || stripos($customer_db_item['profile_name'], $search) !== false) { $display_secrets[] = $customer_db_item; } } } 
             else { $display_secrets = $filtered_by_status; }
             $items_per_page = 10; $total_items = count($display_secrets); $total_pages = ceil($total_items / $items_per_page);
             $current_page_num = isset($_GET['p']) && is_numeric($_GET['p']) ? (int)$_GET['p'] : 1;
             if ($current_page_num < 1) $current_page_num = 1; if ($current_page_num > $total_pages && $total_pages > 0) $current_page_num = $total_pages;
             $offset = ($current_page_num - 1) * $items_per_page; $paginated_secrets = array_slice($display_secrets, $offset, $items_per_page);
         } elseif ($page === 'peta') {
-            $wilayah_list = get_wilayah();
-            // Filter wilayah_list if current user is 'penagih'
+            // Ambil wilayah dari database (sudah diambil secara global)
+            // $pdo = connect_db();
+            // $stmt_regions = $pdo->query("SELECT id, region_name FROM regions");
+            // $wilayah_list = $stmt_regions->fetchAll(PDO::FETCH_ASSOC); // Sudah ada secara global
+
+            // Filter wilayah_list jika current user is 'penagih'
             if ($_SESSION['role'] === 'penagih' && !empty($_SESSION['assigned_regions'])) {
-                $filtered_wilayah_list = [];
-                foreach ($wilayah_list as $wilayah) {
-                    if (in_array($wilayah, $_SESSION['assigned_regions'])) {
-                        $filtered_wilayah_list[] = $wilayah;
+                $filtered_wilayah_list_names = [];
+                foreach ($wilayah_list as $wilayah_item) {
+                    if (in_array($wilayah_item['region_name'], $_SESSION['assigned_regions'])) {
+                        $filtered_wilayah_list_names[] = $wilayah_item;
                     }
                 }
-                $wilayah_list = $filtered_wilayah_list;
+                $wilayah_list = $filtered_wilayah_list_names;
             }
 
 
-            $secrets = $filtered_secrets; // Use filtered secrets for peta page
+            $secrets = $filtered_customers_db; // Gunakan pelanggan dari DB yang sudah difilter
             $active_sessions = $API->comm('/ppp/active/print');
             $active_usernames = array_column($active_sessions, 'name');
 
             $customers_with_coords = [];
-            foreach ($secrets as $secret) {
-                $comment_data = parse_comment_string($secret['comment'] ?? '');
-                $coords = trim($comment_data['koordinat']);
-                $wilayah = trim($comment_data['wilayah'] ?? ''); // Get wilayah from comment
+            foreach ($secrets as $customer_db_item) {
+                $coords = trim($customer_db_item['koordinat'] ?? '');
+                $wilayah = trim($customer_db_item['wilayah'] ?? ''); // Get wilayah from DB
 
                 if (!empty($coords) && strpos($coords, ',') !== false) {
                     $status = 'Offline';
-                    if (isset($secret['disabled']) && $secret['disabled'] === 'true') {
+                    // Dapatkan status disabled dari MikroTik
+                    $mikrotik_secret_status = null;
+                    $is_in_mikrotik = false;
+                    foreach($all_secrets_mikrotik as $ms) {
+                        if ($ms['name'] === $customer_db_item['username']) {
+                            $mikrotik_secret_status = $ms;
+                            $is_in_mikrotik = true;
+                            break;
+                        }
+                    }
+
+                    if ($mikrotik_secret_status && isset($mikrotik_secret_status['disabled']) && $mikrotik_secret_status['disabled'] === 'true') {
                         $status = 'Disabled';
-                    } elseif (in_array($secret['name'], $active_usernames)) {
+                    } elseif (in_array($customer_db_item['username'], $active_usernames)) {
                         $status = 'Online';
+                    } elseif (!$is_in_mikrotik) { // Jika tidak ada di MikroTik sama sekali
+                        $status = 'Tidak di MikroTik';
                     }
 
                     $customers_with_coords[] = [
-                        'name' => $secret['name'],
+                        'name' => $customer_db_item['username'],
                         'coords' => $coords,
                         'status' => $status,
                         'wilayah' => $wilayah // Include wilayah in the data
@@ -914,13 +1387,22 @@ try {
             $interfaces = $API->comm('/interface/print'); 
             // Ambil pengaturan dari $app_settings
             $settings = $app_settings;
-        } elseif ($page === 'profil') { $profiles = $all_profiles; $ip_pools = $API->comm('/ip/pool/print');
+        } elseif ($page === 'profil') { 
+            // Ambil profil dari database (sudah diambil secara global)
+            // $pdo = connect_db();
+            // $stmt_profiles = $pdo->query("SELECT * FROM profiles");
+            // $profiles = $stmt_profiles->fetchAll(PDO::FETCH_ASSOC); // Sudah ada secara global
+            $ip_pools = $API->comm('/ip/pool/print'); // IP Pools tetap dari MikroTik
         } elseif ($page === 'user' && $_SESSION['role'] === 'admin') { 
             $pdo = connect_db(); 
             $stmt = $pdo->query("SELECT id, username, role, full_name, assigned_regions FROM users"); // Select assigned_regions
             $app_users = $stmt->fetchAll(PDO::FETCH_ASSOC); 
-        } elseif ($page === 'wilayah') { $wilayah_list = get_wilayah();
-        } elseif ($page === 'laporan' || $page === 'tagihan' || $page === 'penagih_tagihan') { // Combined data fetching for 'laporan', 'tagihan', and 'penagih_tagihan'
+        } elseif ($page === 'wilayah') { 
+            // Ambil wilayah dari database (sudah diambil secara global)
+            // $pdo = connect_db();
+            // $stmt_regions = $pdo->query("SELECT id, region_name FROM regions");
+            // $wilayah_list = $stmt_regions->fetchAll(PDO::FETCH_ASSOC); // Sudah ada secara global
+        } else { // Ini adalah blok untuk halaman laporan, tagihan, dll.
             $pdo = connect_db();
             $report_status_filter = $_GET['status'] ?? 'all'; // For reports
             $assigned_to_filter = $_GET['assigned_to'] ?? 'all'; // For reports
@@ -997,9 +1479,9 @@ try {
                 }
                 if ($assigned_to_filter !== 'all') {
                     if (empty($assigned_to_filter)) { // 'Belum Ditugaskan'
-                        $where_clauses[] = "assigned_to IS NULL OR assigned_to = '[]'";
+                        $where_clauses[] = "assigned_to IS NULL OR JSON_LENGTH(assigned_to) = 0"; // MySQL JSON_LENGTH
                     } else {
-                        $where_clauses[] = "INSTR(assigned_to, ?)";
+                        $where_clauses[] = "JSON_CONTAINS(assigned_to, JSON_QUOTE(?))"; // MySQL JSON_CONTAINS
                         $report_params[] = $assigned_to_filter;
                     }
                 }
@@ -1023,160 +1505,151 @@ try {
                 $stmt_techs = $pdo->query("SELECT username, full_name FROM users WHERE role = 'teknisi' ORDER BY full_name ASC");
                 $technicians = $stmt_techs->fetchAll(PDO::FETCH_ASSOC);
 
-                // Get list of all customer usernames for report creation dropdown
-                $customer_usernames = array_column($all_secrets, 'name');
-            }
-        } elseif ($page === 'penagih_tagihan') { // Penagih Tagihan Page
-            $pdo = connect_db();
-            $search_user = $_GET['search_user'] ?? '';
-            $filter_month = $_GET['filter_month'] ?? '';
-            $filter_status = $_GET['filter_status'] ?? 'all';
-            $filter_by_user = $_GET['filter_by_user'] ?? 'all';
-            
-            $where_clauses = [];
-            $params = [];
-            
-            if (!empty($search_user)) {
-                $where_clauses[] = "username LIKE ?";
-                $params[] = '%' . $search_user . '%';
-            }
-            if (!empty($filter_month)) {
-                $where_clauses[] = "billing_month = ?";
-                $params[] = $filter_month;
-            }
-            if ($filter_status !== 'all') {
-                $where_clauses[] = "status = ?";
-                $params[] = $filter_status;
-            }
-            if ($filter_by_user !== 'all') {
-                $where_clauses[] = "updated_by = ?";
-                $params[] = $filter_by_user;
-            }
+                // Get list of all customer usernames for report creation dropdown (from DB)
+                $stmt_customer_usernames = $pdo->query("SELECT username FROM customers");
+                $customer_usernames = $stmt_customer_usernames->fetchAll(PDO::FETCH_COLUMN);
 
-            // Apply region filter for 'penagih' role
-            $filtered_secret_names = array_column($filtered_secrets, 'name');
-            if (!empty($filtered_secret_names)) {
-                $username_placeholders = implode(',', array_fill(0, count($filtered_secret_names), '?'));
-                $where_clauses[] = "username IN ($username_placeholders)";
-                $params = array_merge($params, $filtered_secret_names);
-            } else {
-                $where_clauses[] = "1 = 0"; // Force no results if no assigned regions or no customers in them
-            }
-
-            $sql = "SELECT * FROM invoices";
-            if (!empty($where_clauses)) {
-                $sql .= " WHERE " . implode(" AND ", $where_clauses);
-            }
-            $sql .= " ORDER BY due_date DESC";
-            
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute($params);
-            $invoices = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            // Calculate totals based on the same filters
-            $total_sql = "SELECT status, SUM(amount) as total FROM invoices";
-            if (!empty($where_clauses)) {
-                $total_sql .= " WHERE " . implode(" AND ", $where_clauses);
-            }
-            $total_sql .= " GROUP BY status";
-
-            $total_stmt = $pdo->prepare($total_sql);
-            $total_stmt->execute($params);
-            $totals = $total_stmt->fetchAll(PDO::FETCH_KEY_PAIR);
-
-            $total_lunas = $totals['Lunas'] ?? 0;
-            $total_belum_lunas = $totals['Belum Lunas'] ?? 0;
-
-            // Get list of admins and collectors for the filter dropdown
-            $user_stmt = $pdo->query("SELECT full_name FROM users WHERE (role = 'admin' OR role = 'penagih') AND full_name IS NOT NULL AND full_name != '' ORDER BY full_name ASC");
-            $confirmation_users = $user_stmt->fetchAll(PDO::FETCH_COLUMN);
-
-        } elseif ($page === 'gangguan' && $_SESSION['role'] === 'teknisi') { // New: Technician Report Page
-            $pdo = connect_db();
-            $report_status_filter = $_GET['status'] ?? 'all'; // Changed default from 'Pending' to 'all'
-            $search_report = $_GET['search_report'] ?? '';
-
-            $report_where_clauses = ["INSTR(assigned_to, ?)"]; // Filter by technician's username in assigned_to JSON
-            $report_params = [$_SESSION['username']];
-
-            if ($report_status_filter !== 'all') {
-                $report_where_clauses[] = "report_status = ?";
-                $report_params[] = $report_status_filter;
-            }
-            if (!empty($search_report)) {
-                $report_where_clauses[] = "(customer_username LIKE ? OR issue_description LIKE ?)";
-                $report_params[] = '%' . $search_report . '%';
-                $report_params[] = '%' . $search_report . '%';
-            }
-
-            $sql_reports = "SELECT * FROM reports";
-            if (!empty($report_where_clauses)) {
-                $sql_reports .= " WHERE " . implode(" AND ", $report_where_clauses);
-            }
-            $sql_reports .= " ORDER BY created_at DESC";
-
-            $stmt_reports = $pdo->prepare($sql_reports);
-            $stmt_reports->execute($report_params);
-            $reports = $stmt_reports->fetchAll(PDO::FETCH_ASSOC);
-        } elseif ($page === 'teknisi_dashboard') { // New: Technician Dashboard Page
-            $pdo = connect_db();
-            $assigned_reports = [];
-            
-            // Get reports assigned to the current technician
-            $stmt_assigned_reports = $pdo->prepare("SELECT * FROM reports WHERE INSTR(assigned_to, ?) ORDER BY created_at DESC"); // Filter by technician's username in assigned_to JSON
-            $stmt_assigned_reports->execute([$_SESSION['username']]);
-            $assigned_reports = $stmt_assigned_reports->fetchAll(PDO::FETCH_ASSOC);
-
-            // Summarize assigned reports by status
-            $assigned_reports_summary = [
-                'total' => count($assigned_reports),
-                'Pending' => 0,
-                'In Progress' => 0,
-                'Resolved' => 0,
-                'Cancelled' => 0
-            ];
-            foreach ($assigned_reports as $report) {
-                if (isset($assigned_reports_summary[$report['report_status']])) {
-                    $assigned_reports_summary[$report['report_status']]++;
+            } elseif ($page === 'penagih_tagihan') { // Penagih Tagihan Page
+                $pdo = connect_db();
+                $search_user = $_GET['search_user'] ?? '';
+                $filter_month = $_GET['filter_month'] ?? '';
+                $filter_status = $_GET['filter_status'] ?? 'all';
+                $filter_by_user = $_GET['filter_by_user'] ?? 'all';
+                
+                $where_clauses = [];
+                $params = [];
+                
+                if (!empty($search_user)) {
+                    $where_clauses[] = "username LIKE ?";
+                    $params[] = '%' . $search_user . '%';
                 }
-            }
+                if (!empty($filter_month)) {
+                    $where_clauses[] = "billing_month = ?";
+                    $params[] = $filter_month;
+                }
+                if ($filter_status !== 'all') {
+                    $where_clauses[] = "status = ?";
+                    $params[] = $filter_status;
+                }
+                if ($filter_by_user !== 'all') {
+                    $where_clauses[] = "updated_by = ?";
+                    $params[] = $filter_by_user;
+                }
 
-            // Get customer coordinates for reports
-            $customers_with_reports_coords = [];
-            $customer_usernames_in_reports = array_unique(array_column($assigned_reports, 'customer_username'));
-            
-            if (!empty($customer_usernames_in_reports)) {
-                // Fetch secrets for these customers to get their coordinates
-                $secrets_for_reports = [];
-                foreach($all_secrets as $secret) {
-                    if (in_array($secret['name'], $customer_usernames_in_reports)) {
-                        $comment_data = parse_comment_string($secret['comment'] ?? '');
-                        $coords = trim($comment_data['koordinat']);
+                // Apply region filter for 'penagih' role (based on customers from DB)
+                $filtered_customer_usernames_db = array_column($filtered_customers_db, 'username');
+                if (!empty($filtered_customer_usernames_db)) {
+                    $username_placeholders = implode(',', array_fill(0, count($filtered_customer_usernames_db), '?'));
+                    $where_clauses[] = "username IN ($username_placeholders)";
+                    $params = array_merge($params, $filtered_customer_usernames_db);
+                } else {
+                    $where_clauses[] = "1 = 0"; // Force no results if no assigned regions or no customers in them
+                }
 
-                        if (!empty($coords) && strpos($coords, ',') !== false) {
-                            // Add secret to secrets_for_reports only if it has valid coordinates
-                            $secrets_for_reports[] = $secret;
-                        }
+                $sql = "SELECT * FROM invoices";
+                if (!empty($where_clauses)) {
+                    $sql .= " WHERE " . implode(" AND ", $where_clauses);
+                }
+                $sql .= " ORDER BY due_date DESC";
+                
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute($params);
+                $invoices = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                // Calculate totals based on the same filters
+                $total_sql = "SELECT status, SUM(amount) as total FROM invoices";
+                if (!empty($where_clauses)) {
+                    $total_sql .= " WHERE " . implode(" AND ", $where_clauses);
+                }
+                $total_sql .= " GROUP BY status";
+
+                $total_stmt = $pdo->prepare($total_sql);
+                $total_stmt->execute($params);
+                $totals = $total_stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+
+                $total_lunas = $totals['Lunas'] ?? 0;
+                $total_belum_lunas = $totals['Belum Lunas'] ?? 0;
+
+                // Get list of admins and collectors for the filter dropdown
+                $user_stmt = $pdo->query("SELECT full_name FROM users WHERE (role = 'admin' OR role = 'penagih') AND full_name IS NOT NULL AND full_name != '' ORDER BY full_name ASC");
+                $confirmation_users = $user_stmt->fetchAll(PDO::FETCH_COLUMN);
+
+            } elseif ($page === 'gangguan' && $_SESSION['role'] === 'teknisi') { // New: Technician Report Page
+                $pdo = connect_db();
+                $report_status_filter = $_GET['status'] ?? 'all'; // Changed default from 'Pending' to 'all'
+                $search_report = $_GET['search_report'] ?? '';
+
+                $report_where_clauses = ["JSON_CONTAINS(assigned_to, JSON_QUOTE(?))"]; // MySQL JSON_CONTAINS
+                $report_params = [$_SESSION['username']];
+
+                if ($report_status_filter !== 'all') {
+                    $report_where_clauses[] = "report_status = ?";
+                    $report_params[] = $report_status_filter;
+                }
+                if (!empty($search_report)) {
+                    $report_where_clauses[] = "(customer_username LIKE ? OR issue_description LIKE ?)";
+                    $report_params[] = '%' . $search_report . '%';
+                    $report_params[] = '%' . $search_report . '%';
+                }
+
+                $sql_reports = "SELECT * FROM reports";
+                if (!empty($report_where_clauses)) {
+                    $sql_reports .= " WHERE " . implode(" AND ", $report_where_clauses);
+                }
+                $sql_reports .= " ORDER BY created_at DESC";
+
+                $stmt_reports = $pdo->prepare($sql_reports);
+                $stmt_reports->execute($report_params);
+                $reports = $stmt_reports->fetchAll(PDO::FETCH_ASSOC);
+            } elseif ($page === 'teknisi_dashboard') { // New: Technician Dashboard Page
+                $pdo = connect_db();
+                $assigned_reports = [];
+                
+                // Get reports assigned to the current technician
+                $stmt_assigned_reports = $pdo->prepare("SELECT * FROM reports WHERE JSON_CONTAINS(assigned_to, JSON_QUOTE(?)) ORDER BY created_at DESC"); // MySQL JSON_CONTAINS
+                $stmt_assigned_reports->execute([$_SESSION['username']]);
+                $assigned_reports = $stmt_assigned_reports->fetchAll(PDO::FETCH_ASSOC);
+
+                // Summarize assigned reports by status
+                $assigned_reports_summary = [
+                    'total' => count($assigned_reports),
+                    'Pending' => 0,
+                    'In Progress' => 0,
+                    'Resolved' => 0,
+                    'Cancelled' => 0
+                ];
+                foreach ($assigned_reports as $report) {
+                    if (isset($assigned_reports_summary[$report['report_status']])) {
+                        $assigned_reports_summary[$report['report_status']]++;
                     }
                 }
 
-                foreach ($assigned_reports as $report) {
-                    foreach ($secrets_for_reports as $secret) {
-                        if ($report['customer_username'] === $secret['name']) {
-                            $comment_data = parse_comment_string($secret['comment'] ?? '');
-                            $coords = trim($comment_data['koordinat']);
+                // Get customer coordinates for reports
+                $customers_with_reports_coords = [];
+                $customer_usernames_in_reports = array_unique(array_column($assigned_reports, 'customer_username'));
+                
+                if (!empty($customer_usernames_in_reports)) {
+                    // Fetch customers from DB to get their coordinates
+                    $username_placeholders = implode(',', array_fill(0, count($customer_usernames_in_reports), '?'));
+                    $stmt_customers_for_reports = $pdo->prepare("SELECT username, koordinat FROM customers WHERE username IN ($username_placeholders)");
+                    $stmt_customers_for_reports->execute($customer_usernames_in_reports);
+                    $customers_coords_map = [];
+                    foreach ($stmt_customers_for_reports->fetchAll(PDO::FETCH_ASSOC) as $c) {
+                        $customers_coords_map[$c['username']] = $c['koordinat'];
+                    }
 
-                            if (!empty($coords) && strpos($coords, ',') !== false) {
-                                $customers_with_reports_coords[] = [
-                                    'name' => $secret['name'],
-                                    'coords' => $coords,
-                                    'report_status' => $report['report_status'], // Include report status for icon color
-                                    'issue_description' => $report['issue_description'],
-                                    'reported_by' => $report['reported_by'],
-                                    'created_at' => date('d M Y H:i', strtotime($report['created_at']))
-                                ];
-                            }
-                            break; // Found the secret for this report
+                    foreach ($assigned_reports as $report) {
+                        $coords = $customers_coords_map[$report['customer_username']] ?? null;
+
+                        if (!empty($coords) && strpos($coords, ',') !== false) {
+                            $customers_with_reports_coords[] = [
+                                'name' => $report['customer_username'],
+                                'coords' => $coords,
+                                'report_status' => $report['report_status'], // Include report status for icon color
+                                'issue_description' => $report['issue_description'],
+                                'reported_by' => $report['reported_by'],
+                                'created_at' => date('d M Y H:i', strtotime($report['created_at']))
+                            ];
                         }
                     }
                 }

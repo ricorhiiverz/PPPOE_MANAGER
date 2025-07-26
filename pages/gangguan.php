@@ -226,8 +226,10 @@ document.addEventListener('DOMContentLoaded', function() {
             // Map usernames to full names for display in modal
             let assignedToDisplay = [];
             if (assignedTo.length > 0) {
-                // In a real application, you might pass the technicians array to JS
+                // In a real application, you would pass the technicians array to JS
                 // or make an AJAX call to get full names. For now, just display usernames.
+                // For this migration, the $technicians array is NOT available in this page's scope.
+                // So, we'll just display usernames here.
                 assignedToDisplay = assignedTo.map(username => username); 
             } else {
                 assignedToDisplay.push('Belum Ditugaskan');

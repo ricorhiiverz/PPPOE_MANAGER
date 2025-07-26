@@ -74,13 +74,14 @@ if ($_SESSION['role'] !== 'admin') {
                     <?php if (empty($reports)): ?>
                         <tr><td colspan="8" class="text-center text-muted py-5">Tidak ada laporan gangguan untuk ditampilkan.</td></tr>
                     <?php endif; ?>
-                    <?php foreach ($reports as $report): 
-                        $assigned_to_display = json_decode($report['assigned_to'] ?? '[]', true);
-                        $assigned_to_text = empty($assigned_to_display) ? 'Belum Ditugaskan' : implode(', ', $assigned_to_display);
+                    <?php foreach ($reports as $report):
+                        // assigned_to disimpan sebagai JSON di DB
+                        $assigned_to_users_array = json_decode($report['assigned_to'] ?? '[]', true);
+                        
                         // Map usernames to full names for display
                         $display_assigned_to = [];
-                        foreach ($assigned_to_display as $assigned_username) {
-                            $found_tech_name = $assigned_username;
+                        foreach ($assigned_to_users_array as $assigned_username) {
+                            $found_tech_name = $assigned_username; // Default to username if full name not found
                             foreach ($technicians as $tech) {
                                 if ($tech['username'] === $assigned_username) {
                                     $found_tech_name = $tech['full_name'] ?? $tech['username'];
@@ -108,7 +109,7 @@ if ($_SESSION['role'] !== 'admin') {
                         </td>
                         <td><?= htmlspecialchars($report['reported_by']) ?></td>
                         <td>
-                            <?php if (!empty($report['assigned_to'])): ?>
+                            <?php if (!empty($assigned_to_users_array)): ?>
                                 <span class="badge text-bg-primary"><?= htmlspecialchars($assigned_to_text_display) ?></span>
                             <?php else: ?>
                                 <span class="text-muted small">Belum</span>
@@ -364,12 +365,14 @@ document.addEventListener('DOMContentLoaded', function() {
             // Map usernames to full names for display in modal
             let assignedToDisplay = [];
             if (assignedTo.length > 0) {
-                // Assuming technicians data is available globally or can be fetched
-                // For now, we'll just display usernames if full names aren't easily accessible here
+                // In a real application, you would pass the technicians array to JS
+                // or make an AJAX call to get full names. For now, just display usernames.
+                // For this migration, the $technicians array is passed from index.php
+                // so we can try to map it here.
+                const allTechnicians = <?= json_encode($technicians ?? []) ?>; // Pass PHP array to JS
                 assignedToDisplay = assignedTo.map(username => {
-                    // This part would ideally fetch full name from a JS array of technicians
-                    // For simplicity, just use username for now or pass full list of technicians to JS
-                    return username; 
+                    const tech = allTechnicians.find(t => t.username === username);
+                    return tech ? (tech.full_name || tech.username) : username;
                 });
             } else {
                 assignedToDisplay.push('Belum Ditugaskan');

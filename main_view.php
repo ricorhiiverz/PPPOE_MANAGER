@@ -29,7 +29,6 @@
             #sidebar { margin-left: calc(-1 * var(--sidebar-width)); } /* Default hidden on mobile */
             #sidebar.active { margin-left: 0; } /* Show sidebar on mobile when active */
             #content { margin-left: 0; } /* No margin on mobile */
-            .wrapper { display: block; } /* Stack elements on mobile */
             .navbar-light { margin-left: 0 !important; } /* Remove margin from navbar on mobile */
         }
 
@@ -167,9 +166,12 @@
 </div> <!-- End .wrapper -->
 
 <!-- Modals -->
-<?php if (in_array($_SESSION['role'], ['admin', 'teknisi'])): ?>
-<button class="btn btn-primary btn-lg rounded-circle position-fixed" style="bottom: 20px; right: 20px; z-index: 1030;" data-bs-toggle="modal" data-bs-target="#addUserModal" title="Tambah Pelanggan Baru"><i class="fas fa-plus"></i></button>
-<?php endif; ?>
+<?php
+// Tombol melayang dihapus dari sini. Sekarang akan ditempatkan di pages/pelanggan.php
+// if (in_array($_SESSION['role'], ['admin', 'teknisi'])): ?>
+<!-- <button class="btn btn-primary btn-lg rounded-circle position-fixed" style="bottom: 20px; right: 20px; z-index: 1030;" data-bs-toggle="modal" data-bs-target="#addUserModal" title="Tambah Pelanggan Baru"><i class="fas fa-plus"></i></button> -->
+<?php // endif; ?>
+
 <!-- Modal Tambah User -->
 <div class="modal fade" id="addUserModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
     <div class="modal-header"><h5 class="modal-title">Tambah Pelanggan Baru</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
@@ -181,7 +183,7 @@
         </div>
         <div class="row">
             <div class="col-md-6 mb-3"><label class="form-label">Service</label><select name="service" class="form-select"><option value="pppoe">pppoe</option><option value="any">any</option></select></div>
-            <div class="col-md-6 mb-3"><label class="form-label">Profil</label><select name="profile" required class="form-select"><?php if(isset($profiles)) foreach ($profiles as $profile): ?><option value="<?= htmlspecialchars($profile['name']) ?>"><?= htmlspecialchars($profile['name']) ?></option><?php endforeach; ?></select></div>
+            <div class="col-md-6 mb-3"><label class="form-label">Profil</label><select name="profile" required class="form-select"><?php if(isset($profiles)) foreach ($profiles as $profile): ?><option value="<?= htmlspecialchars($profile['profile_name']) ?>"><?= htmlspecialchars($profile['profile_name']) ?></option><?php endforeach; ?></select></div>
         </div>
         <hr class="my-4">
         <h6 class="mb-3">Informasi Tambahan (Opsional)</h6>
@@ -196,7 +198,7 @@
             <div class="col-md-6 mb-3"><label class="form-label">Nama Wilayah/Area</label>
                 <select name="wilayah" class="form-select">
                     <option value="">-- Pilih Wilayah --</option>
-                    <?php if(isset($wilayah_list)) foreach ($wilayah_list as $wilayah): ?><option value="<?= htmlspecialchars($wilayah) ?>"><?= htmlspecialchars($wilayah) ?></option><?php endforeach; ?>
+                    <?php if(isset($wilayah_list)) foreach ($wilayah_list as $wilayah): ?><option value="<?= htmlspecialchars($wilayah['region_name']) ?>"><?= htmlspecialchars($wilayah['region_name']) ?></option><?php endforeach; ?>
                 </select>
             </div>
         </div>
@@ -229,16 +231,20 @@
         <div class="mb-3"><label class="form-label">Nama Profil</label><input type="text" name="profile_name" required class="form-control"></div>
         <div class="mb-3"><label class="form-label">Rate Limit (Upload/Download)</label><input type="text" name="rate_limit" class="form-control" placeholder="Contoh: 5M/10M"><div class="form-text">Kosongkan jika tidak ada batas kecepatan.</div></div>
         <div class="mb-3"><label class="form-label">Tagihan (Rp)</label><input type="number" name="tagihan" class="form-control" placeholder="150000"></div>
+        <div class="mb-3"><label class="form-label">Local Address</label><input type="text" name="local_address" class="form-control" placeholder="Contoh: 10.0.0.1"></div>
+        <div class="mb-3"><label class="form-label">Remote Address</label><input type="text" name="remote_address" class="form-control" placeholder="Contoh: 10.0.0.254 atau pool_name"></div>
         <div class="modal-footer border-0"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button><button type="submit" class="btn btn-primary">Simpan Profil</button></div>
     </form></div>
 </div></div></div>
 <!-- Modal Edit Profil -->
 <div class="modal fade" id="editProfileModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
     <div class="modal-header"><h5 class="modal-title" id="editProfileModalLabel">Edit Profil</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
-    <div class="modal-body"><form action="" method="POST"><input type="hidden" name="action" value="edit_profile"><input type="hidden" name="edit_profile_id" id="edit-profile-id">
+    <div class="modal-body"><form action="" method="POST"><input type="hidden" name="action" value="edit_profile"><input type="hidden" name="edit_profile_id" id="edit-profile-id"><input type="hidden" name="profile_id_db" id="edit-profile-id-db">
         <div class="mb-3"><label class="form-label">Nama Profil</label><input type="text" name="edit_profile_name" id="edit-profile-name" required class="form-control" readonly></div>
         <div class="mb-3"><label class="form-label">Rate Limit (Upload/Download)</label><input type="text" name="edit_rate_limit" id="edit-rate-limit" class="form-control" placeholder="Contoh: 5M/10M"></div>
         <div class="mb-3"><label class="form-label">Tagihan (Rp)</label><input type="number" name="edit_tagihan" id="edit-tagihan" class="form-control" placeholder="150000"></div>
+        <div class="mb-3"><label class="form-label">Local Address</label><input type="text" name="edit_local_address" id="edit-local-address" class="form-control" placeholder="Contoh: 10.0.0.1"></div>
+        <div class="mb-3"><label class="form-label">Remote Address</label><input type="text" name="edit_remote_address" id="edit-remote-address" class="form-control" placeholder="Contoh: 10.0.0.254 atau pool_name"></div>
         <div class="modal-footer border-0"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button><button type="submit" class="btn btn-primary">Simpan Perubahan</button></div>
     </form></div>
 </div></div></div>
@@ -261,14 +267,14 @@
             <div class="mb-3" id="add_assigned_regions_container" style="display: block;">
                 <label class="form-label">Wilayah Ditugaskan (khusus Penagih)</label>
                 <div class="form-check-group border rounded p-2">
-                    <?php if (empty($wilayah_list_for_users)): ?>
+                    <?php if (empty($wilayah_list)): ?>
                         <p class="text-muted small mb-0">Belum ada wilayah yang terdaftar. Tambahkan di halaman Manajemen Wilayah.</p>
                     <?php else: ?>
-                        <?php foreach ($wilayah_list_for_users as $wilayah): ?>
+                        <?php foreach ($wilayah_list as $wilayah): ?>
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="assigned_regions[]" value="<?= htmlspecialchars($wilayah) ?>" id="add_region_<?= str_replace(' ', '_', $wilayah) ?>">
-                                <label class="form-check-label" for="add_region_<?= str_replace(' ', '_', $wilayah) ?>">
-                                    <?= htmlspecialchars($wilayah) ?>
+                                <input class="form-check-input" type="checkbox" name="assigned_regions[]" value="<?= htmlspecialchars($wilayah['region_name']) ?>" id="add_region_<?= str_replace(' ', '_', $wilayah['region_name']) ?>">
+                                <label class="form-check-label" for="add_region_<?= str_replace(' ', '_', $wilayah['region_name']) ?>">
+                                    <?= htmlspecialchars($wilayah['region_name']) ?>
                                 </label>
                             </div>
                         <?php endforeach; ?>
@@ -311,7 +317,7 @@
         if(editUserModal) {
             editUserModal.addEventListener('show.bs.modal', function (event) {
                 const button = event.relatedTarget;
-                const userId = button.getAttribute('data-id');
+                const userId = button.getAttribute('data-id'); // Ini adalah ID dari database MySQL
                 const formContainer = document.getElementById('edit-form-container');
                 formContainer.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>';
 
@@ -324,25 +330,30 @@
                         }
                         
                         let profileOptions = '';
+                        // Ambil profiles dari PHP yang sudah di-fetch dari database (profiles)
                         <?php if(isset($profiles)) foreach ($profiles as $profile): ?>
-                            profileOptions += `<option value="<?= htmlspecialchars($profile['name']) ?>" ${data.profile === '<?= htmlspecialchars($profile['name']) ?>' ? 'selected' : ''}>
-                                <?= htmlspecialchars($profile['name']) ?>
+                            profileOptions += `<option value="<?= htmlspecialchars($profile['profile_name']) ?>" ${data.profile_name === '<?= htmlspecialchars($profile['profile_name']) ?>' ? 'selected' : ''}>
+                                <?= htmlspecialchars($profile['profile_name']) ?>
                             </option>`;
                         <?php endforeach; ?>
                         
                         let wilayahOptions = '<option value="">-- Pilih Wilayah --</option>';
+                        // Ambil wilayah dari PHP yang sudah di-fetch dari DB (regions)
                         <?php if(isset($wilayah_list)) foreach ($wilayah_list as $wilayah): ?>
-                             wilayahOptions += `<option value="<?= htmlspecialchars($wilayah) ?>" ${data.wilayah === '<?= htmlspecialchars($wilayah) ?>' ? 'selected' : ''}>
-                                <?= htmlspecialchars($wilayah) ?>
+                             wilayahOptions += `<option value="<?= htmlspecialchars($wilayah['region_name']) ?>" ${data.wilayah === '<?= htmlspecialchars($wilayah['region_name']) ?>' ? 'selected' : ''}>
+                                <?= htmlspecialchars($wilayah['region_name']) ?>
                             </option>`;
                         <?php endforeach; ?>
 
                         formContainer.innerHTML = `
                             <form action="" method="POST">
                                 <input type="hidden" name="action" value="edit_user">
-                                <input type="hidden" name="edit_id" value="${data['.id']}">
-                                <div class="mb-3"><label class="form-label">Username</label><input type="text" value="${data.name}" required class="form-control" readonly></div>
+                                <input type="hidden" name="customer_id_db" value="${data.id}"> <!-- ID dari database kita -->
+                                <input type="hidden" name="mikrotik_id" value="${data.mikrotik_id || ''}"> <!-- ID dari MikroTik -->
+                                <input type="hidden" name="edit_username" value="${data.username}"> <!-- Tambahkan username untuk logging jika mikrotik_id kosong -->
+                                <div class="mb-3"><label class="form-label">Username</label><input type="text" value="${data.username}" required class="form-control" readonly></div>
                                 <div class="mb-3"><label class="form-label">Password Baru (Opsional)</label><input type="text" name="edit_password" class="form-control" placeholder="Kosongkan jika tidak ingin diubah"></div>
+                                <div class="mb-3"><label class="form-label">Service</label><select name="edit_service" class="form-select"><option value="pppoe" ${data.service === 'pppoe' ? 'selected' : ''}>pppoe</option><option value="any" ${data.service === 'any' ? 'selected' : ''}>any</option></select></div>
                                 <div class="mb-3"><label class="form-label">Profil</label><select name="edit_profile" required class="form-select">${profileOptions}</select></div>
                                 <hr class="my-4">
                                 <h6 class="mb-3">Informasi Tambahan</h6>
@@ -358,7 +369,7 @@
                                 </div>
                                 <div class="row">
                                     <div class="col-md-6 mb-3"><label class="form-label">Nomor WhatsApp</label><input type="tel" name="edit_whatsapp" class="form-control" value="${data.whatsapp || ''}"></div>
-                                    <div class="col-md-6 mb-3"><label class="form-label">Tgl Registrasi</label><input type="date" name="edit_registrasi" class="form-control" value="${data.registrasi || ''}"></div>
+                                    <div class="col-md-6 mb-3"><label class="form-label">Tgl Registrasi</label><input type="date" name="edit_registrasi" class="form-control" value="${data.tgl_registrasi || ''}"></div>
                                 </div>
                                 <div class="mb-3"><label class="form-label">Tgl Tagihan (1-31)</label><input type="number" name="edit_tgl_tagihan" class="form-control" value="${data.tgl_tagihan || ''}" min="1" max="31"></div>
                                 <div class="modal-footer border-0"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button><button type="submit" class="btn btn-primary">Simpan Perubahan</button></div>
@@ -366,6 +377,10 @@
                         `;
 
                         document.getElementById('get-location-btn-edit').addEventListener('click', function() { getLocation('edit-koordinat-input', this); });
+                    })
+                    .catch(error => { 
+                        formContainer.innerHTML = `<div class="alert alert-danger">Terjadi kesalahan saat memuat data: ${error.message}</div>`; 
+                        console.error('Error fetching user details:', error); 
                     });
             });
         }
@@ -379,24 +394,47 @@
         if(editProfileModal) {
             editProfileModal.addEventListener('show.bs.modal', function (event) {
                 const button = event.relatedTarget;
-                editProfileModal.querySelector('#edit-profile-id').value = button.getAttribute('data-id');
+                // Ambil ID dari MikroTik dan dari database
+                const mikrotikProfileId = button.getAttribute('data-id');
+                const profileIdDb = button.getAttribute('data-id-db'); // ID dari database kita
+
+                editProfileModal.querySelector('#edit-profile-id').value = mikrotikProfileId;
+                editProfileModal.querySelector('#edit-profile-id-db').value = profileIdDb;
                 editProfileModal.querySelector('#edit-profile-name').value = button.getAttribute('data-name');
                 editProfileModal.querySelector('#edit-rate-limit').value = button.getAttribute('data-rate-limit');
                 editProfileModal.querySelector('#edit-tagihan').value = button.getAttribute('data-tagihan');
+                editProfileModal.querySelector('#edit-local-address').value = button.getAttribute('data-local-address');
+                editProfileModal.querySelector('#edit-remote-address').value = button.getAttribute('data-remote-address');
             });
         }
         const detailUserModal = document.getElementById('detailUserModal');
         if(detailUserModal) {
             detailUserModal.addEventListener('show.bs.modal', function (event) {
-                const button = event.relatedTarget; const userId = button.getAttribute('data-id');
+                const button = event.relatedTarget; 
+                const userId = button.getAttribute('data-id'); // Ini adalah ID dari database MySQL
                 const detailContent = document.getElementById('detail-content');
                 detailContent.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+                
                 fetch(`index.php?action=get_user_details&id=${userId}`)
                     .then(response => response.json())
                     .then(data => {
                         if (data.error) { detailContent.innerHTML = `<div class="alert alert-danger">${data.error}</div>`; return; }
-                        let statusBadge = (data.disabled === 'true') ? '<span class="badge text-bg-danger">Disabled</span>' : (data['status-online'] ? '<span class="badge text-bg-success">Online</span>' : '<span class="badge text-bg-secondary">Offline</span>');
-                        let onlineInfo = data['status-online'] ? `<dt>Alamat IP</dt><dd>${data.address || 'N/A'}</dd><dt>Uptime</dt><dd>${data.uptime || 'N/A'}</dd>` : '';
+                        
+                        let statusBadge = '';
+                        if (data.status_mikrotik === 'disabled') {
+                            statusBadge = '<span class="badge text-bg-danger">Disabled</span>';
+                        } else if (data.status_mikrotik === 'not_found') {
+                            statusBadge = '<span class="badge text-bg-warning">Tidak di MikroTik</span>';
+                        } else if (data['status-online']) {
+                            statusBadge = '<span class="badge text-bg-success">Online</span>';
+                        } else {
+                            statusBadge = '<span class="badge text-bg-secondary">Offline</span>';
+                        }
+
+                        let onlineInfo = data['status-online'] ? `
+                            <dt>Alamat IP</dt><dd>${data.address || 'N/A'}</dd>
+                            <dt>Uptime</dt><dd>${data.uptime || 'N/A'}</dd>
+                        ` : '';
                         
                         let koordinatHTML = `<dd>${data.koordinat || 'N/A'}</dd>`;
                         if (data.koordinat && data.koordinat.trim() !== '' && data.koordinat !== 'N/A') {
@@ -404,18 +442,31 @@
                             koordinatHTML = `<dd>${data.koordinat} <a href="https://www.google.com/maps?q=${coords}&t=k" target="_blank" class="btn btn-sm btn-outline-primary ms-2"><i class="fas fa-map-location-dot me-1"></i> Lihat Peta</a></dd>`;
                         }
 
-                        let commentInfo = `
-                            <hr>
-                            <dt>Koordinat</dt>${koordinatHTML}
-                            <dt>Wilayah</dt><dd>${data.wilayah || 'N/A'}</dd>
-                            <dt>No. WhatsApp</dt><dd>${data.whatsapp || 'N/A'}</dd>
-                            <dt>Tgl Registrasi</dt><dd>${data.registrasi || 'N/A'}</dd>
-                            <dt>Tgl Tagihan</dt><dd>Setiap tanggal ${data.tgl_tagihan || 'N/A'}</dd>
-                            <dt>Tagihan Profil</dt><dd>Rp ${data.tagihan ? new Intl.NumberFormat('id-ID').format(data.tagihan) : 'N/A'}</dd>
+                        let tagihanProfileDisplay = data.tagihan_profile ? new Intl.NumberFormat('id-ID').format(data.tagihan_profile) : 'N/A';
+
+                        let contentHtml = `
+                            <dl class="dl-horizontal">
+                                <dt>Username</dt><dd class="fw-bold">${data.username || 'N/A'}</dd>
+                                <dt>Status MikroTik</dt><dd>${statusBadge}</dd>
+                                <dt>Profil</dt><dd>${data.profile || 'N/A'}</dd>
+                                <dt>Service</dt><dd>${data.service || 'N/A'}</dd>
+                                ${onlineInfo}
+                                <dt>Login Terakhir Keluar</dt><dd>${data['last-logged-out'] || 'N/A'}</dd>
+                                <hr>
+                                <dt>Koordinat</dt>${koordinatHTML}
+                                <dt>Wilayah</dt><dd>${data.wilayah || 'N/A'}</dd>
+                                <dt>No. WhatsApp</dt><dd>${data.whatsapp || 'N/A'}</dd>
+                                <dt>Tgl Registrasi</dt><dd>${data.tgl_registrasi || 'N/A'}</dd>
+                                <dt>Tgl Tagihan</dt><dd>Setiap tanggal ${data.tgl_tagihan || 'N/A'}</dd>
+                                <dt>Tagihan Profil</dt><dd>Rp ${tagihanProfileDisplay}</dd>
+                            </dl>
                         `;
-                        detailContent.innerHTML = `<dl class="dl-horizontal"><dt>Username</dt><dd class="fw-bold">${data.name || 'N/A'}</dd><dt>Status</dt><dd>${statusBadge}</dd><dt>Profil</dt><dd>${data.profile || 'N/A'}</dd><dt>Service</dt><dd>${data.service || 'N/A'}</dd>${onlineInfo}<dt>Login Terakhir Keluar</dt><dd>${data['last-logged-out'] || 'N/A'}</dd>${commentInfo}</dl>`;
+                        detailContent.innerHTML = contentHtml;
                     })
-                    .catch(error => { detailContent.innerHTML = `<div class="alert alert-danger">Terjadi kesalahan.</div>`; console.error('Error:', error); });
+                    .catch(error => { 
+                        detailContent.innerHTML = `<div class="alert alert-danger">Terjadi kesalahan saat memuat detail: ${error.message}</div>`; 
+                        console.error('Error fetching user details:', error); 
+                    });
             });
         }
 

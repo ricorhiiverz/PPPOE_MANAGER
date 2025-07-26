@@ -122,6 +122,7 @@ if ($_SESSION['role'] !== 'teknisi') {
         }).addTo(map);
 
         // Ambil data pelanggan dengan laporan dari PHP
+        // $customers_with_reports_coords sekarang sudah diolah di index.php
         const customersWithReports = <?= json_encode($customers_with_reports_coords ?? []) ?>;
 
         // Buat ikon kustom untuk status laporan
@@ -202,7 +203,7 @@ if ($_SESSION['role'] !== 'teknisi') {
                 currentLocationMarker.setLatLng(latlng); // Update marker position
             } else {
                 currentLocationMarker = L.marker(latlng, {icon: blueDotIcon}).addTo(map)
-                    .bindPopup("").openPopup();
+                    .bindPopup("Lokasi Anda").openPopup(); // Updated popup text
             }
             // Optional: Center map on current location after first update
             // map.setView(latlng, map.getZoom() || 16); 
@@ -224,7 +225,8 @@ if ($_SESSION['role'] !== 'teknisi') {
                     message = "Terjadi kesalahan yang tidak diketahui.";
                     break;
             }
-            alert(message);
+            // Using showToast instead of alert for better UI integration
+            showToast(message, 'warning'); 
             // Hentikan pelacakan jika ada error
             if (watchId) {
                 navigator.geolocation.clearWatch(watchId);
@@ -247,7 +249,7 @@ if ($_SESSION['role'] !== 'teknisi') {
             // Optional: Set view to current location initially, but watchPosition will handle ongoing updates
             // map.locate({setView: true, maxZoom: 16}); 
         } else {
-            alert('Geolocation tidak didukung oleh browser Anda.');
+            showToast('Geolocation tidak didukung oleh browser Anda.', 'error');
         }
 
         // Cleanup function when component is unloaded (important for single-page apps or complex navigations)

@@ -6,7 +6,7 @@ if ($_SESSION['role'] !== 'admin') {
 }
 
 // Ambil daftar wilayah untuk dropdown
-$wilayah_list_for_users = get_wilayah(); // Pastikan fungsi get_wilayah() tersedia
+// $wilayah_list_for_users sekarang diambil dari $wilayah_list yang sudah di-fetch dari DB di index.php
 ?>
 
 <div class="card shadow-sm">
@@ -29,7 +29,8 @@ $wilayah_list_for_users = get_wilayah(); // Pastikan fungsi get_wilayah() tersed
                 <?php if (empty($app_users)): ?>
                     <tr><td colspan="5" class="text-center text-muted py-5">Tidak ada pengguna.</td></tr>
                 <?php endif; ?>
-                <?php foreach ($app_users as $user): 
+                <?php foreach ($app_users as $user):
+                    // assigned_regions disimpan sebagai JSON di DB
                     $assigned_regions_display = json_decode($user['assigned_regions'] ?? '[]', true);
                     $assigned_regions_text = empty($assigned_regions_display) ? 'Semua Wilayah' : implode(', ', $assigned_regions_display);
                 ?>
@@ -37,7 +38,7 @@ $wilayah_list_for_users = get_wilayah(); // Pastikan fungsi get_wilayah() tersed
                     <td class="fw-bold"><?= htmlspecialchars($user['full_name'] ?? 'N/A') ?></td>
                     <td><?= htmlspecialchars($user['username']) ?></td>
                     <td>
-                        <?php 
+                        <?php
                             $role = $user['role'];
                             $badge_class = 'secondary';
                             if ($role === 'admin') $badge_class = 'success';
@@ -100,14 +101,14 @@ $wilayah_list_for_users = get_wilayah(); // Pastikan fungsi get_wilayah() tersed
                     <div class="mb-3" id="add_assigned_regions_container" style="display: block;">
                         <label class="form-label">Wilayah Ditugaskan (khusus Penagih)</label>
                         <div class="form-check-group border rounded p-2">
-                            <?php if (empty($wilayah_list_for_users)): ?>
+                            <?php if (empty($wilayah_list)): ?>
                                 <p class="text-muted small mb-0">Belum ada wilayah yang terdaftar. Tambahkan di halaman Manajemen Wilayah.</p>
                             <?php else: ?>
-                                <?php foreach ($wilayah_list_for_users as $wilayah): ?>
+                                <?php foreach ($wilayah_list as $wilayah): ?>
                                     <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" name="assigned_regions[]" value="<?= htmlspecialchars($wilayah) ?>" id="add_region_<?= str_replace(' ', '_', $wilayah) ?>">
-                                        <label class="form-check-label" for="add_region_<?= str_replace(' ', '_', $wilayah) ?>">
-                                            <?= htmlspecialchars($wilayah) ?>
+                                        <input class="form-check-input" type="checkbox" name="assigned_regions[]" value="<?= htmlspecialchars($wilayah['region_name']) ?>" id="add_region_<?= str_replace(' ', '_', $wilayah['region_name']) ?>">
+                                        <label class="form-check-label" for="add_region_<?= str_replace(' ', '_', $wilayah['region_name']) ?>">
+                                            <?= htmlspecialchars($wilayah['region_name']) ?>
                                         </label>
                                     </div>
                                 <?php endforeach; ?>
@@ -148,14 +149,14 @@ $wilayah_list_for_users = get_wilayah(); // Pastikan fungsi get_wilayah() tersed
                     <div class="mb-3" id="edit_assigned_regions_container" style="display: none;">
                         <label class="form-label">Wilayah Ditugaskan (khusus Penagih)</label>
                         <div class="form-check-group border rounded p-2">
-                            <?php if (empty($wilayah_list_for_users)): ?>
+                            <?php if (empty($wilayah_list)): ?>
                                 <p class="text-muted small mb-0">Belum ada wilayah yang terdaftar. Tambahkan di halaman Manajemen Wilayah.</p>
                             <?php else: ?>
-                                <?php foreach ($wilayah_list_for_users as $wilayah): ?>
+                                <?php foreach ($wilayah_list as $wilayah): ?>
                                     <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" name="assigned_regions[]" value="<?= htmlspecialchars($wilayah) ?>" id="edit_region_<?= str_replace(' ', '_', $wilayah) ?>">
-                                        <label class="form-check-label" for="edit_region_<?= str_replace(' ', '_', $wilayah) ?>">
-                                            <?= htmlspecialchars($wilayah) ?>
+                                        <input class="form-check-input" type="checkbox" name="assigned_regions[]" value="<?= htmlspecialchars($wilayah['region_name']) ?>" id="edit_region_<?= str_replace(' ', '_', $wilayah['region_name']) ?>">
+                                        <label class="form-check-label" for="edit_region_<?= str_replace(' ', '_', $wilayah['region_name']) ?>">
+                                            <?= htmlspecialchars($wilayah['region_name']) ?>
                                         </label>
                                     </div>
                                 <?php endforeach; ?>
